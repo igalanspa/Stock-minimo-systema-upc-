@@ -1230,6 +1230,7 @@ function renderStats(c){
 
   // ---- A: registro diario ----
   const cA = el('div','card');
+  cA.style.cssText = 'background:#eef0df; border-color:#bfc9a0;';
   cA.appendChild(el('h3','sec','📝 Registro diario — Estadísticas'));
   const cob = S.turnosPosibles ? Math.round(S.turnosReg/S.turnosPosibles*100) : 0;
   const conQ = Object.keys(S.meds).filter(n=>S.meds[n].bajo>0);
@@ -1267,6 +1268,7 @@ function renderStats(c){
 
   // ---- B: estupefacientes ----
   const cB = el('div','card');
+  cB.style.cssText = 'background:#eaf7f0; border-color:#b5ddc6;';
   cB.appendChild(el('h3','sec','💊 Estupefacientes — Estadísticas'));
   const cobE = S.turnosPosibles ? Math.round(S.turnosE/S.turnosPosibles*100) : 0;
   const conQE = Object.keys(S.est).filter(n=>S.est[n].bajo>0);
@@ -1302,6 +1304,7 @@ function renderStats(c){
 
   // ---- C: carros de paro ----
   const cC = el('div','card');
+  cC.style.cssText = 'background:#fdecea; border-color:#f2b3ab;';
   cC.appendChild(el('h3','sec','🚑 Carros de paro — Estadísticas'));
   S.carros.forEach(cr=>{
     cC.appendChild(el('h3','sec',cr.hoja));
