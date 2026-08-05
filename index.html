@@ -819,6 +819,39 @@ setInterval(()=>{ if(cargado) { cargarTodo(true); } }, 45000);
 const DATA = () => STATE.config;
 const REG = () => STATE.reg;
 
+// ---- responsables guardados (persisten en la base central para todo el equipo) ----
+function getResponsables(){ if(!Array.isArray(DATA().responsables)) DATA().responsables = []; return DATA().responsables; }
+function selResp(valor, onSel){
+  const wrap = el('div');
+  const sel = el('select');
+  function opciones(){
+    sel.innerHTML = '';
+    const o0 = el('option','','— seleccionar —'); o0.value=''; sel.appendChild(o0);
+    getResponsables().forEach(n=>{ const o=el('option','',n); o.value=n; sel.appendChild(o); });
+    const oa = el('option','','➕ Agregar nombre…'); oa.value='__add__'; sel.appendChild(oa);
+    sel.value = valor || '';
+  }
+  opciones();
+  const caja = el('div'); caja.style.cssText='display:none; gap:6px; margin-top:6px;';
+  const inp = el('input'); inp.type='text'; inp.placeholder='Nombre y apellido';
+  const btn = el('button','btn btn-sec','Guardar');
+  btn.onclick = ()=>{
+    const n = inp.value.trim();
+    if(!n) return;
+    if(!getResponsables().includes(n)){ getResponsables().push(n); getResponsables().sort(); syncConfig(); }
+    valor = n; opciones(); caja.style.display='none'; inp.value='';
+    onSel(n); toast('✅ ' + n + ' guardado — quedará disponible siempre');
+  };
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter') btn.onclick(); });
+  caja.append(inp, btn);
+  sel.onchange = ()=>{
+    if(sel.value === '__add__'){ sel.value = valor || ''; caja.style.display='flex'; inp.focus(); return; }
+    valor = sel.value; onSel(sel.value);
+  };
+  wrap.append(sel, caja);
+  return wrap;
+}
+
 const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const hoyISO = () => { const h = new Date(); return h.getFullYear() + '-' + String(h.getMonth()+1).padStart(2,'0') + '-' + String(h.getDate()).padStart(2,'0'); };
 
@@ -860,8 +893,7 @@ function renderRegistro(c){
     tg.appendChild(b);
   });
   const rd = ((REG().stock[ctx.fecha]||{})[ctx.turno]) || {};
-  const inR = el('input'); inR.type='text'; inR.placeholder='Iniciales'; inR.style.width='110px'; inR.value = rd.__resp || '';
-  inR.oninput = e=>{ setReg('stock', ctx.fecha, ctx.turno, '__resp', e.target.value); };
+  const inR = selResp(rd.__resp || '', v=>{ setReg('stock', ctx.fecha, ctx.turno, '__resp', v); });
   fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR));
   card.appendChild(fc);
   card.appendChild(el('p','hint','Anota solo el conteo. Si queda bajo el stock mínimo, se marca rojo al instante. Todo se guarda en la base central: todos los computadores ven lo mismo.'));
@@ -939,11 +971,12 @@ function renderEstup(c){
   });
   tabla.appendChild(tb); card2.appendChild(tabla);
   const extra = el('div','estup-extra');
-  [['__pac','Stock de pacientes','number'],['__receta','N° receta actual','text'],['__resp','Responsable (iniciales)','text']].forEach(([k,lbl,tp])=>{
+  [['__pac','Stock de pacientes','number'],['__receta','N° receta actual','text']].forEach(([k,lbl,tp])=>{
     const inp = el('input'); inp.type=tp; inp.value = rd[k]||'';
     inp.oninput = e=>setReg('estup', ctx.fechaE, ctx.turnoE, k, e.target.value);
     extra.appendChild(ctrl(lbl, inp));
   });
+  extra.appendChild(ctrl('Responsable', selResp(rd.__resp || '', v=>setReg('estup', ctx.fechaE, ctx.turnoE, '__resp', v))));
   card2.appendChild(extra);
   c.appendChild(card2);
 }
@@ -966,8 +999,7 @@ function renderCarros(c){
   const inF = el('input'); inF.type='date'; inF.value=ctx.fechaC; inF.onchange=e=>{ctx.fechaC=e.target.value; render();};
   const carro = DATA().carros[ctx.carroIdx];
   const rev = getRev(carro.hoja, ctx.fechaC);
-  const inR = el('input'); inR.type='text'; inR.placeholder='Iniciales'; inR.style.width='110px'; inR.value = rev.resp || '';
-  inR.oninput = e=>{ getRev(carro.hoja, ctx.fechaC).resp = e.target.value; syncCarro(carro.hoja, ctx.fechaC); };
+  const inR = selResp(rev.resp || '', v=>{ getRev(carro.hoja, ctx.fechaC).resp = v; syncCarro(carro.hoja, ctx.fechaC); });
   fc.append(ctrl('Carro', sel), ctrl('Fecha de revisión', inF), ctrl('Responsable', inR));
   card.appendChild(fc);
   card.appendChild(el('p','hint','Anota cantidad y vencimiento más próximo de cada ítem. Rojo = bajo stock o vencido; ámbar = vence dentro de 30 días. Cada fecha distinta crea una nueva revisión (el Excel del mes muestra hasta 6).'));
@@ -1120,7 +1152,7 @@ function renderExcel(c){
 function renderMaestra(c){
   const card = el('div','card');
   const tabs = el('div','fila-ctrl');
-  const nombres = ['Stock Mínimo UPC','Estupefacientes', ...DATA().carros.map(cr=>cr.hoja.replace('Carro de paro','Carro'))];
+  const nombres = ['Stock Mínimo UPC','Estupefacientes', ...DATA().carros.map(cr=>cr.hoja.replace('Carro de paro','Carro')), '👤 Responsables'];
   nombres.forEach((n,i)=>{
     const t = el('div','tab'+(i===ctx.tabMaestra?' act':''), n);
     t.onclick=()=>{ctx.tabMaestra=i; render();};
@@ -1148,6 +1180,25 @@ function renderMaestra(c){
     const add = el('button','btn-add','+ Agregar ítem');
     add.onclick=()=>{lista.push({nombre:'',stock:1}); syncConfig(); render();};
     card2.appendChild(add);
+  } else if(ctx.tabMaestra - 2 >= DATA().carros.length) {
+    const lista = getResponsables();
+    if(!lista.length) tb.innerHTML = '<tr><td colspan="3" class="hint" style="padding:14px">Aún no hay nombres guardados. Agrégalos aquí o directamente al registrar un turno.</td></tr>';
+    lista.forEach(n=>{
+      const tr = el('tr');
+      tr.appendChild(el('td','',n));
+      tr.appendChild(el('td','entrada',''));
+      const td3 = el('td','del'); const bd = el('button','btn-mini','✕');
+      bd.onclick = ()=>{ const ix=lista.indexOf(n); if(ix>=0){ lista.splice(ix,1); syncConfig(); render(); } };
+      td3.appendChild(bd);
+      tr.appendChild(td3); tb.appendChild(tr);
+    });
+    tabla.appendChild(tb); card2.appendChild(tabla);
+    const fr2 = el('div','fila-ctrl'); fr2.style.marginTop = '10px';
+    const inp = el('input'); inp.type='text'; inp.placeholder='Nombre y apellido';
+    const add2 = el('button','btn btn-sec','+ Agregar responsable');
+    add2.onclick = ()=>{ const n=inp.value.trim(); if(!n) return; if(!lista.includes(n)){ lista.push(n); lista.sort(); syncConfig(); } render(); };
+    inp.addEventListener('keydown', e=>{ if(e.key==='Enter') add2.onclick(); });
+    fr2.append(inp, add2); card2.appendChild(fr2);
   } else {
     const carro = DATA().carros[ctx.tabMaestra-2];
     carro.secciones.forEach(sec=>{
