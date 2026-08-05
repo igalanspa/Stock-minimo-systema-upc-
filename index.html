@@ -859,7 +859,7 @@ const hoyISO = () => { const h = new Date(); return h.getFullYear() + '-' + Stri
 let ctx = { fecha: hoyISO(), turno: 'L', fechaE: hoyISO(), turnoE: 'L', carroIdx: 0, fechaC: hoyISO(), tabActiva: 0, tabMaestra: 0 };
 
 // ================= navegación =================
-const TABS = ['📝 Registro diario', '💊 Estupefacientes', '🚑 Carros de paro', '📊 Panel', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
+const TABS = ['📝 Registro diario', '💊 Estupefacientes', '🚑 Carros de paro', '📊 Panel', '📈 Estadísticas', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
 function renderTabs(){
   const nav = document.getElementById('tabs'); nav.innerHTML = '';
   TABS.forEach((t,i)=>{
@@ -874,7 +874,7 @@ function render(){
   if(!cargado) return;
   renderTabs();
   const c = document.getElementById('contenido'); c.innerHTML = '';
-  [renderRegistro, renderEstup, renderCarros, renderPanel, renderExcel, renderMaestra, renderRespaldo][ctx.tabActiva](c);
+  [renderRegistro, renderEstup, renderCarros, renderPanel, renderStats, renderExcel, renderMaestra, renderRespaldo][ctx.tabActiva](c);
 }
 
 // helpers de dom
@@ -1115,6 +1115,207 @@ function renderPanel(c){
     card3.appendChild(d);
   });
   c.appendChild(card3);
+}
+
+// ================= TAB: estadísticas =================
+function calcStats(mes, anio){
+  const ndias = new Date(anio, mes, 0).getDate();
+  const hoy = new Date();
+  const ultDia = (hoy.getFullYear()===anio && hoy.getMonth()+1===mes) ? hoy.getDate() : ndias;
+  const turnosPosibles = Math.max(0, Math.min(ultDia, ndias)) * 2;
+  const fk = d => anio + '-' + String(mes).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+  const meds = {};
+  DATA().stock_minimo_upc.forEach(it=>{ meds[it.nombre] = {min: it.stock, n:0, bajo:0, suma:0, minObs:null}; });
+  let turnosReg = 0;
+  for(let d=1; d<=ndias; d++){
+    const rd = REG().stock[fk(d)]; if(!rd) continue;
+    ['L','N'].forEach(t=>{
+      const rt = rd[t]; if(!rt) return;
+      let alguno = false;
+      Object.keys(rt).forEach(nom=>{
+        if(nom.indexOf('__')===0) return;
+        const v = parseFloat(rt[nom]); if(isNaN(v)) return;
+        alguno = true;
+        const m = meds[nom]; if(!m) return;
+        m.n++; m.suma += v;
+        if(m.minObs===null || v < m.minObs) m.minObs = v;
+        if(typeof m.min==='number' && v < m.min) m.bajo++;
+      });
+      if(alguno) turnosReg++;
+    });
+  }
+  const est = {};
+  DATA().estupefacientes.forEach(it=>{ est[it.nombre] = {min: it.stock, n:0, bajo:0, disc:0}; });
+  let turnosE = 0, discTotal = 0;
+  const sec = [];
+  for(let d=1; d<=ndias; d++){
+    const rd = REG().estup[fk(d)]; if(!rd) continue;
+    ['L','N'].forEach(t=>{
+      const rt = rd[t]; if(!rt) return;
+      let alguno = false;
+      Object.keys(rt).forEach(nom=>{
+        if(nom.indexOf('__')===0 || !rt[nom] || !est[nom]) return;
+        const r = parseFloat(rt[nom].r), e2 = parseFloat(rt[nom].e);
+        if(!isNaN(r) || !isNaN(e2)) alguno = true;
+        if(!isNaN(r)){ est[nom].n++; if(typeof est[nom].min==='number' && r < est[nom].min) est[nom].bajo++; }
+        if(!isNaN(e2)){ est[nom].n++; if(typeof est[nom].min==='number' && e2 < est[nom].min) est[nom].bajo++; }
+        sec.push({orden: d*2 + (t==='N'?1:0), nombre: nom, r: r, e: e2});
+      });
+      if(alguno) turnosE++;
+    });
+  }
+  const porMed = {};
+  sec.sort((a,b)=>a.orden-b.orden).forEach(s=>{ if(!porMed[s.nombre]) porMed[s.nombre]=[]; porMed[s.nombre].push(s); });
+  Object.keys(porMed).forEach(nom=>{
+    const arr = porMed[nom];
+    for(let i=1;i<arr.length;i++){
+      if(!isNaN(arr[i-1].e) && !isNaN(arr[i].r) && arr[i-1].e !== arr[i].r){ est[nom].disc++; discTotal++; }
+    }
+  });
+  const carros = DATA().carros.map(carro=>{
+    const revs = (REG().carros[carro.hoja]||[]).slice().sort((a,b)=>a.fecha<b.fecha?-1:1);
+    const delMes = revs.filter(r=>r.fecha.indexOf(anio+'-'+String(mes).padStart(2,'0'))===0);
+    const ult = revs[revs.length-1];
+    const totalItems = carro.secciones.reduce((s,x)=>s+x.items.length,0);
+    let revisados=0, bajos=0, vencidos=0, v30=0, diasUlt=null;
+    if(ult){
+      diasUlt = Math.round((hoy - new Date(ult.fecha+'T00:00:00'))/86400000);
+      carro.secciones.forEach(sx=>sx.items.forEach(it=>{
+        const dat = ult.items ? ult.items[it.nombre] : null;
+        if(!dat) return;
+        if(dat.c!==undefined && dat.c!=='') revisados++;
+        const cnum = parseFloat(dat.c);
+        if(!isNaN(cnum) && typeof it.stock==='number' && cnum < it.stock) bajos++;
+        if(dat.v){
+          const dias = Math.round((new Date(dat.v+'T00:00:00') - hoy)/86400000);
+          if(dias<=0) vencidos++; else if(dias<=30) v30++;
+        }
+      }));
+    }
+    return {hoja: carro.hoja, revMes: delMes.length, ult: ult?ult.fecha:null, diasUlt: diasUlt, totalItems: totalItems, revisados: revisados, bajos: bajos, vencidos: vencidos, v30: v30};
+  });
+  return {turnosPosibles: turnosPosibles, turnosReg: turnosReg, meds: meds, turnosE: turnosE, est: est, discTotal: discTotal, carros: carros};
+}
+function kpiRow(pares){
+  const k = el('div','kpis');
+  pares.forEach(p=>{
+    const d = el('div','kpi'+(p[2]?' alerta':''));
+    d.appendChild(el('div','v',String(p[0]))); d.appendChild(el('div','l',p[1]));
+    k.appendChild(d);
+  });
+  return k;
+}
+function rec(card, tipo, txt){
+  const d = el('div','alert-item '+tipo);
+  d.appendChild(el('span','','💡 ' + txt));
+  card.appendChild(d);
+}
+function renderStats(c){
+  const fc = el('div','card');
+  const fr = el('div','fila-ctrl');
+  const selM = el('select'); MESES_N.forEach((m,i)=>{const o=el('option','',m);o.value=i+1;selM.appendChild(o);});
+  const h = new Date();
+  if(ctx.stMes===undefined){ ctx.stMes = h.getMonth()+1; ctx.stAnio = h.getFullYear(); }
+  selM.value = ctx.stMes; selM.onchange = e=>{ ctx.stMes=+e.target.value; render(); };
+  const inA = el('input'); inA.type='number'; inA.value=ctx.stAnio; inA.style.width='100px';
+  inA.onchange = e=>{ ctx.stAnio=+e.target.value; render(); };
+  fr.append(ctrl('Mes', selM), ctrl('Año', inA));
+  fc.appendChild(fr);
+  fc.appendChild(el('p','hint','Estadísticas del mes por sección, con mensajes automáticos de mejora sobre reposición, manejo de medicamentos y operatividad del carro de paro.'));
+  c.appendChild(fc);
+  const S = calcStats(ctx.stMes, ctx.stAnio);
+
+  // ---- A: registro diario ----
+  const cA = el('div','card');
+  cA.appendChild(el('h3','sec','📝 Registro diario — Estadísticas'));
+  const cob = S.turnosPosibles ? Math.round(S.turnosReg/S.turnosPosibles*100) : 0;
+  const conQ = Object.keys(S.meds).filter(n=>S.meds[n].bajo>0);
+  const totConteos = Object.keys(S.meds).reduce((s,n)=>s+S.meds[n].n,0);
+  cA.appendChild(kpiRow([[S.turnosReg+' / '+S.turnosPosibles,'Turnos con registro ('+cob+'%)',cob<80],[conQ.length,'Medicamentos con quiebres',conQ.length>0],[totConteos,'Conteos realizados',false]]));
+  const usados = Object.keys(S.meds).filter(n=>S.meds[n].n>0).sort((a,b)=>(S.meds[b].bajo/S.meds[b].n)-(S.meds[a].bajo/S.meds[a].n));
+  if(usados.length){
+    const t1 = el('table');
+    t1.innerHTML = '<thead><tr><th>Medicamento</th><th>Stock mín</th><th>Conteos</th><th>Bajo mín</th><th>% bajo</th><th>Promedio</th></tr></thead>';
+    const tb1 = el('tbody');
+    usados.forEach(n=>{
+      const m = S.meds[n], pct = Math.round(m.bajo/m.n*100);
+      const tr = el('tr');
+      [n, m.min, m.n, m.bajo, pct+'%', (m.suma/m.n).toFixed(1)].forEach((v,i)=>{
+        const td = el('td','',String(v));
+        if(i===4 && pct>=25) td.style.cssText='color:var(--rojo);font-weight:700';
+        tr.appendChild(td);
+      });
+      tb1.appendChild(tr);
+    });
+    t1.appendChild(tb1); cA.appendChild(t1);
+  } else cA.appendChild(el('p','hint','Sin registros este mes.'));
+  cA.appendChild(el('h3','sec','Cómo mejorar'));
+  let recsA = 0;
+  if(S.turnosPosibles && cob < 80){ rec(cA,'ambar','Cobertura de registro '+cob+'%: reforzar el registro en CADA turno (L y N). Sin datos completos, la reposición se decide a ciegas.'); recsA++; }
+  usados.forEach(n=>{
+    const m = S.meds[n], pct = Math.round(m.bajo/m.n*100);
+    if(pct>=25){ rec(cA,'rojo',n+': quedó bajo mínimo en el '+pct+'% de los conteos. El punto de reposición no está funcionando → aumentar stock mínimo (actual: '+m.min+', mínimo observado: '+m.minObs+') o acordar con farmacia reposición en el mismo turno de la alerta.'); recsA++; }
+    else if(pct>=10){ rec(cA,'ambar',n+': bajo mínimo en el '+pct+'% de los conteos → reponer apenas la celda se marque roja, sin esperar al turno siguiente.'); recsA++; }
+    else if(m.n>=6 && m.bajo===0 && typeof m.min==='number' && m.min>0 && (m.suma/m.n) >= m.min*2.5){ rec(cA,'okk',n+': promedio '+ (m.suma/m.n).toFixed(1) +' vs mínimo '+m.min+' — posible sobrestock; evaluar reducir inventario inmovilizado.'); recsA++; }
+  });
+  if(!recsA) rec(cA,'okk','Sin alertas: la reposición está funcionando bien este mes ✔');
+  cA.appendChild(el('p','hint','📌 Regla de manejo: el stock mínimo es el punto de reposición. Al llegar a él (celda roja), se genera la solicitud a farmacia en el MISMO turno y se deja registrado el responsable. Así el quiebre nunca alcanza al paciente.'));
+  c.appendChild(cA);
+
+  // ---- B: estupefacientes ----
+  const cB = el('div','card');
+  cB.appendChild(el('h3','sec','💊 Estupefacientes — Estadísticas'));
+  const cobE = S.turnosPosibles ? Math.round(S.turnosE/S.turnosPosibles*100) : 0;
+  const conQE = Object.keys(S.est).filter(n=>S.est[n].bajo>0);
+  cB.appendChild(kpiRow([[S.turnosE+' / '+S.turnosPosibles,'Turnos con control ('+cobE+'%)',cobE<80],[conQE.length,'Con quiebres',conQE.length>0],[S.discTotal,'Diferencias entrega→recibo',S.discTotal>0]]));
+  const usadosE = Object.keys(S.est).filter(n=>S.est[n].n>0).sort((a,b)=>S.est[b].disc-S.est[a].disc);
+  if(usadosE.length){
+    const t2 = el('table');
+    t2.innerHTML = '<thead><tr><th>Medicamento</th><th>Stock mín</th><th>Conteos</th><th>Bajo mín</th><th>Diferencias</th></tr></thead>';
+    const tb2 = el('tbody');
+    usadosE.forEach(n=>{
+      const m = S.est[n];
+      const tr = el('tr');
+      [n, m.min, m.n, m.bajo, m.disc].forEach((v,i)=>{
+        const td = el('td','',String(v));
+        if(i===4 && m.disc>0) td.style.cssText='color:var(--rojo);font-weight:700';
+        tr.appendChild(td);
+      });
+      tb2.appendChild(tr);
+    });
+    t2.appendChild(tb2); cB.appendChild(t2);
+  } else cB.appendChild(el('p','hint','Sin registros este mes.'));
+  cB.appendChild(el('h3','sec','Cómo mejorar'));
+  let recsB = 0;
+  if(S.discTotal>0){ rec(cB,'rojo','Se detectaron '+S.discTotal+' diferencias entre lo ENTREGADO por un turno y lo RECIBIDO por el siguiente. En estupefacientes esto es crítico: hacer el conteo JUNTOS en el cambio de turno y aclarar cada diferencia antes de firmar.'); recsB++; }
+  if(S.turnosPosibles && cobE < 80){ rec(cB,'ambar','Control registrado solo en el '+cobE+'% de los turnos. El control de estupefacientes debe ser en el 100% de los cambios de turno.'); recsB++; }
+  usadosE.forEach(n=>{
+    const m = S.est[n], pct = m.n ? Math.round(m.bajo/m.n*100) : 0;
+    if(pct>=25){ rec(cB,'rojo',n+': bajo mínimo en el '+pct+'% de los conteos → gestionar receta de reposición con anticipación (no esperar el quiebre).'); recsB++; }
+  });
+  if(!recsB) rec(cB,'okk','Control de estupefacientes sin alertas este mes ✔');
+  cB.appendChild(el('p','hint','📌 Regla de manejo: doble conteo con firma en cada cambio de turno (quien entrega + quien recibe), receta al día y registro inmediato del stock de pacientes. La entrega de un turno debe coincidir EXACTAMENTE con el recibo del siguiente.'));
+  c.appendChild(cB);
+
+  // ---- C: carros de paro ----
+  const cC = el('div','card');
+  cC.appendChild(el('h3','sec','🚑 Carros de paro — Estadísticas'));
+  S.carros.forEach(cr=>{
+    cC.appendChild(el('h3','sec',cr.hoja));
+    const comp = cr.ult ? Math.round(cr.revisados/cr.totalItems*100) : 0;
+    cC.appendChild(kpiRow([[cr.revMes,'Revisiones en el mes',cr.revMes===0],[cr.diasUlt===null?'—':cr.diasUlt+' días','Desde última revisión',cr.diasUlt!==null&&cr.diasUlt>7],[comp+'%','Completitud última rev.',cr.ult&&comp<100],[cr.bajos,'Ítems bajo stock',cr.bajos>0],[cr.vencidos+' / '+cr.v30,'Vencidos / vencen ≤30d',(cr.vencidos+cr.v30)>0]]));
+    if(!cr.ult){ rec(cC,'ambar','Sin revisiones registradas: realizar un chequeo inicial completo (cantidad y vencimiento de cada ítem) para establecer la línea base.'); }
+    else {
+      if(cr.vencidos>0) rec(cC,'rojo',cr.vencidos+' ítems VENCIDOS: retirarlos y reponerlos HOY. Un insumo vencido en el carro puede fallar en plena reanimación.');
+      if(cr.bajos>0) rec(cC,'rojo',cr.bajos+' ítems bajo el stock definido: completar para garantizar operatividad ante una emergencia.');
+      if(cr.v30>0) rec(cC,'ambar',cr.v30+' ítems vencen dentro de 30 días: gestionar el recambio con farmacia esta semana.');
+      if(cr.diasUlt>7) rec(cC,'ambar','Última revisión hace '+cr.diasUlt+' días: se recomienda revisión semanal programada (además de después de cada uso).');
+      if(comp<100) rec(cC,'ambar','La última revisión cubrió el '+comp+'% de los ítems ('+cr.revisados+' de '+cr.totalItems+'): completar el chequeo de los faltantes.');
+      if(cr.vencidos===0 && cr.bajos===0 && cr.v30===0 && cr.diasUlt<=7 && comp===100) rec(cC,'okk','Carro operativo: completo, vigente y revisado ✔');
+    }
+  });
+  cC.appendChild(el('p','hint','📌 Función del carro de paro: es el soporte vital para emergencias (paro cardiorrespiratorio). Debe estar SIEMPRE completo, con insumos vigentes, en su ubicación fija y sellado. Se revisa de forma programada (ideal semanal), después de CADA uso —reponiendo y volviendo a sellar— y cuando vence un insumo. La revisión diaria rápida verifica sello, ubicación y balón de oxígeno.'));
+  c.appendChild(cC);
 }
 
 // ================= TAB 5: excel =================
