@@ -991,6 +991,7 @@ function venceClase(v){
 }
 function renderCarros(c){
   const card = el('div','card');
+  card.style.cssText = 'background:#fdecea; border-color:#f2b3ab;';
   const fc = el('div','fila-ctrl');
   const sel = el('select');
   DATA().carros.forEach((cr,i)=>{ const o=el('option','',cr.hoja); o.value=i; sel.appendChild(o); });
