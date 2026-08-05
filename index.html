@@ -884,6 +884,7 @@ function ctrl(labelTxt, input){ const d = el('div'); const l = el('label','lbl',
 // ================= TAB 1: registro diario =================
 function renderRegistro(c){
   const card = el('div','card');
+  card.style.cssText = 'background:#eef0df; border-color:#bfc9a0;';
   const fc = el('div','fila-ctrl');
   const inF = el('input'); inF.type='date'; inF.value=ctx.fecha; inF.onchange=e=>{ctx.fecha=e.target.value; render();};
   const tg = el('div','turno-tg');
