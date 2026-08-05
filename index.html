@@ -928,6 +928,7 @@ function setReg(tipo, fecha, turno, clave, valor){
 // ================= TAB 2: estupefacientes =================
 function renderEstup(c){
   const card = el('div','card');
+  card.style.cssText = 'background:#eaf7f0; border-color:#b5ddc6;';
   const fc = el('div','fila-ctrl');
   const inF = el('input'); inF.type='date'; inF.value=ctx.fechaE; inF.onchange=e=>{ctx.fechaE=e.target.value; render();};
   const tg = el('div','turno-tg');
