@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema UPC — Registro y Control de Stock</title>
+<style>
+  :root{
+    --azul:#1F4E79; --azul2:#2E6DA4; --claro:#DDEBF7; --fondo:#F4F6F9;
+    --borde:#D8DEE7; --texto:#1c2733; --gris:#5b6b7c; --ok:#1e7e46; --rojo:#c0392b;
+    --rojobg:#fdecea; --ambar:#b7791f; --ambarbg:#fdf6e3;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:'Segoe UI', Arial, sans-serif; background:var(--fondo); color:var(--texto); font-size:14px;}
+  header{background:var(--azul); color:#fff; padding:14px 22px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  header h1{font-size:17px; font-weight:600;}
+  header .unidad{margin-left:auto; display:flex; align-items:center; gap:8px; font-size:13px;}
+  header input{border:none; border-radius:6px; padding:6px 10px; font-size:13px; min-width:200px;}
+  .save-dot{font-size:11.5px; opacity:.9; padding:4px 10px; border-radius:12px; background:rgba(255,255,255,.15);}
+  nav{background:#fff; border-bottom:1px solid var(--borde); padding:8px 18px; display:flex; gap:6px; flex-wrap:wrap; position:sticky; top:0; z-index:5;}
+  .tab{padding:8px 15px; border-radius:20px; cursor:pointer; font-size:13px; font-weight:600; color:var(--gris); border:1px solid transparent;}
+  .tab:hover{background:#eef2f7;}
+  .tab.act{background:var(--azul); color:#fff;}
+  .panel{max-width:1060px; margin:16px auto; padding:0 14px;}
+  .card{background:#fff; border:1px solid var(--borde); border-radius:10px; padding:16px 18px; margin-bottom:14px; box-shadow:0 1px 3px rgba(16,35,60,.06);}
+  .fila-ctrl{display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:4px;}
+  label.lbl{font-weight:600; color:var(--gris); font-size:11px; text-transform:uppercase; letter-spacing:.4px; display:block; margin-bottom:4px;}
+  select,input[type=number],input[type=date],input[type=text]{padding:8px 10px; border:1px solid var(--borde); border-radius:7px; font-size:14px; background:#fff;}
+  .btn{border:none; border-radius:8px; padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer; transition:filter .15s;}
+  .btn:hover{filter:brightness(1.08);}
+  .btn-gen{background:var(--ok); color:#fff; font-size:15px; padding:12px 22px;}
+  .btn-sec{background:#eef2f7; color:var(--azul); border:1px solid var(--borde);}
+  .btn-mini{background:none; border:none; color:var(--rojo); cursor:pointer; font-size:15px; padding:2px 6px;}
+  .btn-add{background:var(--claro); color:var(--azul); border:1px dashed var(--azul2); width:100%; padding:8px; border-radius:7px; cursor:pointer; font-weight:600; margin-top:8px;}
+  .turno-tg{display:flex; border:1px solid var(--borde); border-radius:8px; overflow:hidden;}
+  .turno-tg button{border:none; padding:9px 20px; font-size:14px; font-weight:700; cursor:pointer; background:#fff; color:var(--gris);}
+  .turno-tg button.act{background:var(--azul); color:#fff;}
+  table{width:100%; border-collapse:collapse;}
+  th{font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--gris); text-align:left; padding:6px 8px; border-bottom:2px solid var(--borde);}
+  td{padding:3px 6px; border-bottom:1px solid #eef1f5;}
+  td input{width:100%; border:1px solid var(--borde); border-radius:5px; padding:7px 8px; font-size:14px; background:#fff; text-align:center;}
+  td input.nom{text-align:left; border-color:transparent; background:transparent;}
+  td input.nom:hover,td input.nom:focus{border-color:var(--borde); background:#fff;}
+  td input:focus{border-color:var(--azul2); outline:none;}
+  td input.bajo{background:var(--rojobg); border-color:var(--rojo); color:var(--rojo); font-weight:700;}
+  td input.venc-rojo{background:var(--rojobg); border-color:var(--rojo); color:var(--rojo); font-weight:700;}
+  td input.venc-ambar{background:var(--ambarbg); border-color:var(--ambar); color:var(--ambar); font-weight:700;}
+  td.min{width:80px; text-align:center; color:var(--gris); font-weight:700;}
+  td.entrada{width:110px;} td.del{width:34px; text-align:center;}
+  .cat-row td{background:#f0f4f9; font-weight:700; color:var(--azul); padding:8px;}
+  .hint{font-size:12.5px; color:var(--gris); margin-top:6px; line-height:1.5;}
+  .toast{position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--azul); color:#fff; padding:12px 22px; border-radius:8px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,.25); opacity:0; pointer-events:none; transition:opacity .3s; z-index:20;}
+  .toast.show{opacity:1;}
+  .badge{background:var(--claro); color:var(--azul); font-size:11px; padding:2px 8px; border-radius:10px; font-weight:700;}
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:14px;}
+  .kpi{background:#fff; border:1px solid var(--borde); border-radius:10px; padding:14px; text-align:center;}
+  .kpi .v{font-size:26px; font-weight:800; color:var(--azul);}
+  .kpi.alerta .v{color:var(--rojo);}
+  .kpi .l{font-size:11.5px; color:var(--gris); margin-top:4px; line-height:1.35;}
+  .alert-item{display:flex; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:7px; margin-bottom:6px; font-size:13.5px;}
+  .alert-item.rojo{background:var(--rojobg); color:var(--rojo);}
+  .alert-item.ambar{background:var(--ambarbg); color:var(--ambar);}
+  .alert-item.okk{background:#eaf7f0; color:var(--ok);}
+  h3.sec{font-size:14px; color:var(--azul); margin:14px 0 8px;}
+  .estup-extra{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:12px;}
+  .cargando{max-width:520px; margin:80px auto; text-align:center;}
+  .cargando .big{font-size:40px; margin-bottom:14px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏥 Sistema UPC — Registro y Control de Stock</h1>
+  <span class="save-dot" id="saveDot">conectando…</span>
+  <div class="unidad"><span>Unidad:</span><input id="unidad" type="text"></div>
+</header>
+<nav id="tabs"></nav>
+<div class="panel" id="contenido">
+  <div class="cargando"><div class="big">☁️</div><b>Conectando con la base de datos central…</b><p class="hint">Todos los computadores ven y registran sobre la misma información.</p></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>/* Núcleo v2 del Sistema UPC: genera el Excel mensual PRELLENADO desde el registro digital,
+   con hoja RESUMEN. Usable en Node (test) y navegador. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory(require('xlsx-js-style'), require('jszip'));
+  } else {
+    root.UPCGen = (root.XLSX && root.JSZip) ? factory(root.XLSX, root.JSZip) : null;
+  }
+})(typeof self !== 'undefined' ? self : this, function (XLSX, JSZip) {
+
+  const MESES = ['', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO',
+    'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+  const DSEM = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+
+  const AZUL = '1F4E79', AZUL_CLARO = 'DDEBF7', GRIS = 'D9D9D9', AMARILLO = 'FFF2CC', ROJO_F = 'FFC7CE';
+  const bAll = { top: { style: 'thin', color: { rgb: '808080' } }, bottom: { style: 'thin', color: { rgb: '808080' } }, left: { style: 'thin', color: { rgb: '808080' } }, right: { style: 'thin', color: { rgb: '808080' } } };
+  const F = 'Arial';
+  const S = {
+    titulo: { font: { name: F, sz: 14, bold: true, color: { rgb: AZUL } } },
+    sub: { font: { name: F, sz: 11, bold: true } },
+    leyenda: { font: { name: F, sz: 8, italic: true, color: { rgb: '595959' } } },
+    hdr: { font: { name: F, sz: 9, bold: true, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: AZUL } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: bAll },
+    fechaHdr: { font: { name: F, sz: 9, bold: true }, fill: { patternType: 'solid', fgColor: { rgb: AZUL_CLARO } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll },
+    gris: { font: { name: F, sz: 9, bold: true }, fill: { patternType: 'solid', fgColor: { rgb: GRIS } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll },
+    grisChico: { font: { name: F, sz: 7, bold: true }, fill: { patternType: 'solid', fgColor: { rgb: GRIS } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll },
+    grisIzq: { font: { name: F, sz: 9, bold: true }, fill: { patternType: 'solid', fgColor: { rgb: GRIS } }, alignment: { horizontal: 'left', vertical: 'center' }, border: bAll },
+    item: { font: { name: F, sz: 9 }, alignment: { horizontal: 'left', vertical: 'center' }, border: bAll },
+    stock: { font: { name: F, sz: 9, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll },
+    celda: { font: { name: F, sz: 9 }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll },
+    celdaFecha: { font: { name: F, sz: 9 }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll, numFmt: 'DD-MM-YYYY' },
+    amarillo: { font: { name: F, sz: 9, bold: true }, fill: { patternType: 'solid', fgColor: { rgb: AMARILLO } }, alignment: { horizontal: 'left', vertical: 'center' }, border: bAll },
+    amarilloC: { font: { name: F, sz: 9 }, fill: { patternType: 'solid', fgColor: { rgb: AMARILLO } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll },
+    // resumen
+    h2: { font: { name: F, sz: 12, bold: true, color: { rgb: AZUL } } },
+    kpiV: { font: { name: F, sz: 16, bold: true, color: { rgb: AZUL } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll, fill: { patternType: 'solid', fgColor: { rgb: AZUL_CLARO } } },
+    kpiL: { font: { name: F, sz: 8, color: { rgb: '595959' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: bAll },
+    rojo: { font: { name: F, sz: 9, bold: true }, fill: { patternType: 'solid', fgColor: { rgb: ROJO_F } }, alignment: { horizontal: 'center', vertical: 'center' }, border: bAll }
+  };
+
+  function cell(ws, r, c, v, s) {
+    const ref = XLSX.utils.encode_cell({ r: r, c: c });
+    let t = 's';
+    if (typeof v === 'number') t = 'n';
+    if (v instanceof Date) { v = Math.round((v - new Date(1899, 11, 30)) / 86400000); t = 'n'; }
+    if (v === undefined || v === null || v === '') { v = ''; t = 's'; }
+    ws[ref] = { v: v, t: t, s: s || S.celda };
+  }
+  function merge(ws, r1, c1, r2, c2) { ws['!merges'].push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } }); }
+  function newSheet() { return { '!merges': [], '!cols': [] }; }
+  function setRef(ws, rows, cols) { ws['!ref'] = 'A1:' + XLSX.utils.encode_cell({ r: rows - 1, c: cols - 1 }); }
+  const col = XLSX.utils.encode_col;
+  const esc = (f) => f.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const fkey = (anio, mes, d) => anio + '-' + String(mes).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  const parseISO = (s) => { const p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
+  const fmtISO = (s) => { const p = s.split('-'); return p[2] + '-' + p[1] + '-' + p[0]; };
+
+  // ---------- HOJA DIARIA (stock mínimo / estupefacientes) ----------
+  function hojaDiaria(items, mes, anio, unidad, titulo, leyenda, porDia, subHdrs, filasExtra, getVal, getExtra) {
+    const ndias = new Date(anio, mes, 0).getDate();
+    const ws = newSheet();
+    const nCols = 2 + ndias * porDia;
+    cell(ws, 0, 0, titulo + ' — ' + unidad, S.titulo); merge(ws, 0, 0, 0, 9);
+    cell(ws, 1, 0, 'MES: ' + MESES[mes] + ' ' + anio, S.sub); merge(ws, 1, 0, 1, 9);
+    cell(ws, 2, 0, leyenda, S.leyenda); merge(ws, 2, 0, 2, Math.min(nCols - 1, 30));
+    const rFecha = 3, rTurno = 4, rSub = porDia === 4 ? 5 : -1, rHdr = porDia === 4 ? 6 : 5;
+    cell(ws, rFecha, 0, 'FECHA', S.gris); cell(ws, rFecha, 1, '', S.gris);
+    cell(ws, rTurno, 0, 'TURNO', S.gris); cell(ws, rTurno, 1, '', S.gris);
+    if (rSub > 0) { cell(ws, rSub, 0, '', S.gris); cell(ws, rSub, 1, '', S.gris); }
+    cell(ws, rHdr, 0, porDia === 4 ? 'MEDICAMENTO' : 'MEDICAMENTOS', S.hdr);
+    cell(ws, rHdr, 1, 'STOCK MÍN', S.hdr);
+    ws['!cols'] = [{ wch: 26 }, { wch: 7 }];
+    for (let d = 0; d < ndias; d++) {
+      const c0 = 2 + d * porDia;
+      const f = new Date(anio, mes - 1, d + 1);
+      cell(ws, rFecha, c0, DSEM[f.getDay()] + ' ' + String(d + 1).padStart(2, '0'), S.fechaHdr);
+      for (let i = 1; i < porDia; i++) cell(ws, rFecha, c0 + i, '', S.fechaHdr);
+      merge(ws, rFecha, c0, rFecha, c0 + porDia - 1);
+      if (porDia === 2) {
+        cell(ws, rTurno, c0, 'L', S.gris); cell(ws, rTurno, c0 + 1, 'N', S.gris);
+      } else {
+        cell(ws, rTurno, c0, 'L', S.gris); cell(ws, rTurno, c0 + 1, '', S.gris);
+        cell(ws, rTurno, c0 + 2, 'N', S.gris); cell(ws, rTurno, c0 + 3, '', S.gris);
+        merge(ws, rTurno, c0, rTurno, c0 + 1); merge(ws, rTurno, c0 + 2, rTurno, c0 + 3);
+        subHdrs.forEach((t, i) => cell(ws, rSub, c0 + i, t, S.grisChico));
+      }
+      for (let i = 0; i < porDia; i++) { cell(ws, rHdr, c0 + i, '', S.hdr); ws['!cols'].push({ wch: 4.6 }); }
+    }
+    let fila = rHdr + 1;
+    items.forEach(it => {
+      cell(ws, fila, 0, it.nombre, S.item);
+      cell(ws, fila, 1, it.stock, S.stock);
+      for (let d = 0; d < ndias; d++) {
+        for (let i = 0; i < porDia; i++) {
+          const v = getVal ? getVal(d + 1, i, it.nombre) : '';
+          cell(ws, fila, 2 + d * porDia + i, v === undefined ? '' : v, S.celda);
+        }
+      }
+      fila++;
+    });
+    const ultMed = fila;
+    filasExtra.forEach((txt, xi) => {
+      cell(ws, fila, 0, txt, S.amarillo);
+      cell(ws, fila, 1, '', S.amarilloC);
+      for (let d = 0; d < ndias; d++) {
+        for (let i = 0; i < porDia; i++) {
+          const v = getExtra ? getExtra(d + 1, i, xi) : '';
+          cell(ws, fila, 2 + d * porDia + i, v === undefined ? '' : v, S.amarilloC);
+        }
+      }
+      fila++;
+    });
+    setRef(ws, fila, nCols);
+    const r0 = rHdr + 2;
+    return {
+      ws: ws,
+      freeze: { x: 2, y: rHdr + 1, topLeft: 'C' + (rHdr + 2) },
+      cf: [{
+        sqref: col(2) + r0 + ':' + col(nCols - 1) + ultMed,
+        rules: [{ type: 'expression', dxfId: 0, formula: 'AND(' + col(2) + r0 + '<>"",ISNUMBER($B' + r0 + '),' + col(2) + r0 + '<$B' + r0 + ')' }]
+      }]
+    };
+  }
+
+  // ---------- HOJA CARRO ----------
+  function hojaCarro(carro, mes, anio, unidad, nrev, revisiones) {
+    const ws = newSheet();
+    const nCols = 2 + nrev * 2;
+    cell(ws, 0, 0, carro.titulo + ' — ' + unidad, S.titulo); merge(ws, 0, 0, 0, 9);
+    cell(ws, 1, 0, 'MES: ' + MESES[mes] + ' ' + anio + '    UNIDAD: ________________', S.sub); merge(ws, 1, 0, 1, 9);
+    cell(ws, 2, 0, 'Cada revisión: FECHA REV., CANTIDAD contada y VENCIMIENTO más próximo. Cantidad bajo stock → rojo. Vencido → rojo; vence en 30 días → amarillo.', S.leyenda);
+    merge(ws, 2, 0, 2, nCols - 1);
+    const rFrev = 3, rHdr = 4;
+    cell(ws, rFrev, 0, '', S.gris); cell(ws, rFrev, 1, '', S.gris);
+    cell(ws, rHdr, 0, 'INSUMOS / MEDICAMENTOS', S.hdr);
+    cell(ws, rHdr, 1, 'STOCK', S.hdr);
+    ws['!cols'] = [{ wch: 38 }, { wch: 7 }];
+    const revs = (revisiones || []).slice(0, nrev);
+    for (let b = 0; b < nrev; b++) {
+      const c0 = 2 + b * 2;
+      const rv = revs[b];
+      cell(ws, rFrev, c0, rv ? 'Rev: ' + fmtISO(rv.fecha) + (rv.resp ? ' (' + rv.resp + ')' : '') : 'Fecha Rev:', S.fechaHdr);
+      cell(ws, rFrev, c0 + 1, '', S.fechaHdr);
+      merge(ws, rFrev, c0, rFrev, c0 + 1);
+      cell(ws, rHdr, c0, 'CANT.', S.hdr); cell(ws, rHdr, c0 + 1, 'VENCIM.', S.hdr);
+      ws['!cols'].push({ wch: 6.5 }, { wch: 11 });
+    }
+    let fila = rHdr + 1;
+    carro.secciones.forEach(sec => {
+      cell(ws, fila, 0, sec.categoria, S.grisIzq);
+      for (let c = 1; c < nCols; c++) cell(ws, fila, c, '', S.gris);
+      merge(ws, fila, 0, fila, nCols - 1);
+      fila++;
+      sec.items.forEach(it => {
+        cell(ws, fila, 0, it.nombre, S.item);
+        cell(ws, fila, 1, it.stock, S.stock);
+        for (let b = 0; b < nrev; b++) {
+          const rv = revs[b];
+          const dat = rv && rv.items ? rv.items[it.nombre] : null;
+          cell(ws, fila, 2 + b * 2, dat && dat.c !== undefined && dat.c !== '' ? +dat.c : '', S.celda);
+          cell(ws, fila, 3 + b * 2, dat && dat.v ? parseISO(dat.v) : '', S.celdaFecha);
+        }
+        fila++;
+      });
+    });
+    const ultItem = fila;
+    cell(ws, fila, 0, 'RESPONSABLE (iniciales)', S.amarillo);
+    for (let c = 1; c < nCols; c++) cell(ws, fila, c, '', S.amarilloC);
+    for (let b = 0; b < nrev; b++) if (revs[b] && revs[b].resp) cell(ws, fila, 2 + b * 2, revs[b].resp, S.amarilloC);
+    fila++;
+    setRef(ws, fila, nCols);
+    const cf = [];
+    for (let b = 0; b < nrev; b++) {
+      const lc = col(2 + b * 2), lv = col(3 + b * 2);
+      cf.push({ sqref: lc + '6:' + lc + ultItem, rules: [{ type: 'expression', dxfId: 0, formula: 'AND(' + lc + '6<>"",ISNUMBER($B6),' + lc + '6<$B6)' }] });
+      cf.push({
+        sqref: lv + '6:' + lv + ultItem, rules: [
+          { type: 'expression', dxfId: 0, formula: 'AND(ISNUMBER(' + lv + '6),' + lv + '6<=TODAY())' },
+          { type: 'expression', dxfId: 1, formula: 'AND(ISNUMBER(' + lv + '6),' + lv + '6<=TODAY()+30)' }]
+      });
+    }
+    return { ws: ws, freeze: { x: 2, y: 5, topLeft: 'C6' }, cf: cf };
+  }
+
+  // ---------- ANÁLISIS del mes (compartido por panel y hoja RESUMEN) ----------
+  function analizar(data, reg, mes, anio) {
+    const ndias = new Date(anio, mes, 0).getDate();
+    const hoyD = new Date();
+    // límite: no contar turnos futuros como faltantes
+    const ultDia = (hoyD.getFullYear() === anio && hoyD.getMonth() + 1 === mes) ? hoyD.getDate() : ndias;
+    let turnosReg = 0, turnosPosibles = Math.min(ultDia, ndias) * 2;
+    const quiebres = {};   // nombre -> {veces, ultimo, min}
+    const minimos = {}; data.stock_minimo_upc.forEach(it => minimos[it.nombre] = it.stock);
+    for (let d = 1; d <= ndias; d++) {
+      const rd = (reg.stock || {})[fkey(anio, mes, d)];
+      if (!rd) continue;
+      ['L', 'N'].forEach(t => {
+        const rt = rd[t];
+        if (!rt || !Object.keys(rt).some(k => !k.startsWith('__') && rt[k] !== '' && rt[k] !== undefined)) return;
+        turnosReg++;
+        Object.keys(rt).forEach(nom => {
+          if (nom.startsWith('__')) return;
+          const v = parseFloat(rt[nom]);
+          if (!isNaN(v) && minimos[nom] !== undefined && typeof minimos[nom] === 'number' && v < minimos[nom]) {
+            if (!quiebres[nom]) quiebres[nom] = { veces: 0, ultimo: v, min: minimos[nom], fecha: '' };
+            quiebres[nom].veces++; quiebres[nom].ultimo = v; quiebres[nom].fecha = fkey(anio, mes, d) + ' ' + t;
+          }
+        });
+      });
+    }
+    let turnosEstupReg = 0;
+    const minE = {}; data.estupefacientes.forEach(it => minE[it.nombre] = it.stock);
+    const quiebresE = {};
+    for (let d = 1; d <= ndias; d++) {
+      const rd = (reg.estup || {})[fkey(anio, mes, d)];
+      if (!rd) continue;
+      ['L', 'N'].forEach(t => {
+        const rt = rd[t];
+        if (!rt || !Object.keys(rt).some(k => !k.startsWith('__') && rt[k] && (rt[k].r !== '' && rt[k].r !== undefined || rt[k].e !== '' && rt[k].e !== undefined))) return;
+        turnosEstupReg++;
+        Object.keys(rt).forEach(nom => {
+          if (nom.startsWith('__') || !rt[nom]) return;
+          ['r', 'e'].forEach(k => {
+            const v = parseFloat(rt[nom][k]);
+            if (!isNaN(v) && typeof minE[nom] === 'number' && v < minE[nom]) {
+              if (!quiebresE[nom]) quiebresE[nom] = { veces: 0, ultimo: v, min: minE[nom], fecha: '' };
+              quiebresE[nom].veces++; quiebresE[nom].ultimo = v; quiebresE[nom].fecha = fkey(anio, mes, d) + ' ' + t;
+            }
+          });
+        });
+      });
+    }
+    // carros: última revisión por carro + vencimientos + faltantes
+    const carros = [];
+    data.carros.forEach(carro => {
+      const revs = ((reg.carros || {})[carro.hoja] || []).slice().sort((a, b) => a.fecha < b.fecha ? -1 : 1);
+      const delMes = revs.filter(r => r.fecha.startsWith(anio + '-' + String(mes).padStart(2, '0')));
+      const ult = revs[revs.length - 1];
+      const vencen = [], bajos = [];
+      if (ult) {
+        carro.secciones.forEach(sec => sec.items.forEach(it => {
+          const dat = ult.items ? ult.items[it.nombre] : null;
+          if (!dat) return;
+          const c = parseFloat(dat.c);
+          if (!isNaN(c) && typeof it.stock === 'number' && c < it.stock) bajos.push({ nombre: it.nombre, cant: c, min: it.stock });
+          if (dat.v) {
+            const dv = parseISO(dat.v), dias = Math.round((dv - hoyD) / 86400000);
+            if (dias <= 60) vencen.push({ nombre: it.nombre, venc: dat.v, dias: dias });
+          }
+        }));
+        vencen.sort((a, b) => a.dias - b.dias);
+      }
+      carros.push({ hoja: carro.hoja, titulo: carro.titulo, revisionesMes: delMes.length, ultima: ult ? ult.fecha : null, vencen: vencen, bajos: bajos });
+    });
+    return { turnosReg, turnosPosibles, quiebres, turnosEstupReg, quiebresE, carros, ndias };
+  }
+
+  // ---------- HOJA RESUMEN ----------
+  function hojaResumen(data, reg, mes, anio) {
+    const A = analizar(data, reg, mes, anio);
+    const ws = newSheet();
+    ws['!cols'] = [{ wch: 34 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 14 }];
+    let r = 0;
+    cell(ws, r, 0, 'RESUMEN DEL MES — ' + MESES[mes] + ' ' + anio + ' — ' + data.unidad, S.titulo); merge(ws, r, 0, r, 5); r += 1;
+    cell(ws, r, 0, 'Informe generado automáticamente desde el registro digital del Sistema UPC. Datos fuente: registros de turno y revisiones de carro ingresados en la aplicación.', S.leyenda); merge(ws, r, 0, r, 5); r += 2;
+
+    // KPIs
+    const pct = A.turnosPosibles ? Math.round(A.turnosReg / A.turnosPosibles * 100) : 0;
+    const kpis = [
+      [A.turnosReg + ' / ' + A.turnosPosibles, 'Turnos con registro de stock (' + pct + '%)'],
+      [String(Object.keys(A.quiebres).length), 'Medicamentos con quiebres (stock UPC)'],
+      [String(Object.keys(A.quiebresE).length), 'Estupefacientes con quiebres'],
+      [String(A.carros.reduce((s, c) => s + c.revisionesMes, 0)), 'Revisiones de carro en el mes'],
+      [String(A.carros.reduce((s, c) => s + c.vencen.filter(v => v.dias <= 30).length, 0)), 'Ítems que vencen en ≤30 días']
+    ];
+    kpis.forEach((k, i) => { cell(ws, r, i, k[0], S.kpiV); cell(ws, r + 1, i, k[1], S.kpiL); });
+    r += 3;
+
+    // Quiebres stock UPC
+    cell(ws, r, 0, 'MEDICAMENTOS BAJO STOCK MÍNIMO (planilla diaria)', S.h2); merge(ws, r, 0, r, 5); r++;
+    ['Medicamento', 'Stock mín', 'Veces bajo mín', 'Último valor', 'Último registro'].forEach((h, i) => cell(ws, r, i, h, S.hdr)); r++;
+    const qs = Object.keys(A.quiebres).sort((a, b) => A.quiebres[b].veces - A.quiebres[a].veces);
+    if (!qs.length) { cell(ws, r, 0, 'Sin quiebres registrados en el mes ✔', S.item); merge(ws, r, 0, r, 4); r++; }
+    qs.forEach(nom => {
+      const q = A.quiebres[nom];
+      cell(ws, r, 0, nom, S.item); cell(ws, r, 1, q.min, S.celda);
+      cell(ws, r, 2, q.veces, S.rojo); cell(ws, r, 3, q.ultimo, S.celda); cell(ws, r, 4, fmtISO(q.fecha.split(' ')[0]) + ' ' + q.fecha.split(' ')[1], S.celda);
+      r++;
+    });
+    r++;
+    // Quiebres estupefacientes
+    cell(ws, r, 0, 'ESTUPEFACIENTES BAJO STOCK MÍNIMO', S.h2); merge(ws, r, 0, r, 5); r++;
+    ['Medicamento', 'Stock mín', 'Veces bajo mín', 'Último valor', 'Último registro'].forEach((h, i) => cell(ws, r, i, h, S.hdr)); r++;
+    const qe = Object.keys(A.quiebresE).sort((a, b) => A.quiebresE[b].veces - A.quiebresE[a].veces);
+    if (!qe.length) { cell(ws, r, 0, 'Sin quiebres registrados en el mes ✔', S.item); merge(ws, r, 0, r, 4); r++; }
+    qe.forEach(nom => {
+      const q = A.quiebresE[nom];
+      cell(ws, r, 0, nom, S.item); cell(ws, r, 1, q.min, S.celda);
+      cell(ws, r, 2, q.veces, S.rojo); cell(ws, r, 3, q.ultimo, S.celda); cell(ws, r, 4, fmtISO(q.fecha.split(' ')[0]) + ' ' + q.fecha.split(' ')[1], S.celda);
+      r++;
+    });
+    r++;
+    // Carros
+    cell(ws, r, 0, 'CARROS DE PARO — ESTADO (según última revisión)', S.h2); merge(ws, r, 0, r, 5); r++;
+    ['Carro', 'Rev. en el mes', 'Última rev.', 'Ítems bajo stock', 'Vencen ≤30 días', 'Vencen ≤60 días'].forEach((h, i) => cell(ws, r, i, h, S.hdr)); r++;
+    A.carros.forEach(c => {
+      cell(ws, r, 0, c.hoja, S.item);
+      cell(ws, r, 1, c.revisionesMes, S.celda);
+      cell(ws, r, 2, c.ultima ? fmtISO(c.ultima) : '—', S.celda);
+      cell(ws, r, 3, c.bajos.length, c.bajos.length ? S.rojo : S.celda);
+      cell(ws, r, 4, c.vencen.filter(v => v.dias <= 30).length, c.vencen.filter(v => v.dias <= 30).length ? S.rojo : S.celda);
+      cell(ws, r, 5, c.vencen.filter(v => v.dias <= 60).length, S.celda);
+      r++;
+    });
+    r++;
+    // detalle vencimientos
+    const todosV = [];
+    A.carros.forEach(c => c.vencen.forEach(v => todosV.push({ carro: c.hoja, ...v })));
+    todosV.sort((a, b) => a.dias - b.dias);
+    if (todosV.length) {
+      cell(ws, r, 0, 'DETALLE DE VENCIMIENTOS PRÓXIMOS (≤60 días)', S.h2); merge(ws, r, 0, r, 5); r++;
+      ['Ítem', 'Carro', 'Vence', 'Días restantes'].forEach((h, i) => cell(ws, r, i, h, S.hdr)); r++;
+      todosV.forEach(v => {
+        cell(ws, r, 0, v.nombre, S.item); cell(ws, r, 1, v.carro, S.item);
+        cell(ws, r, 2, fmtISO(v.venc), S.celda);
+        cell(ws, r, 3, v.dias, v.dias <= 30 ? S.rojo : S.celda);
+        r++;
+      });
+    }
+    // detalle ítems bajo stock en carros
+    const todosB = [];
+    A.carros.forEach(c => c.bajos.forEach(b => todosB.push({ carro: c.hoja, ...b })));
+    if (todosB.length) {
+      r++;
+      cell(ws, r, 0, 'DETALLE ÍTEMS BAJO STOCK EN CARROS (última revisión)', S.h2); merge(ws, r, 0, r, 5); r++;
+      ['Ítem', 'Carro', 'Cantidad', 'Stock mín'].forEach((h, i) => cell(ws, r, i, h, S.hdr)); r++;
+      todosB.forEach(b => {
+        cell(ws, r, 0, b.nombre, S.item); cell(ws, r, 1, b.carro, S.item);
+        cell(ws, r, 2, b.cant, S.rojo); cell(ws, r, 3, b.min, S.celda); r++;
+      });
+    }
+    setRef(ws, r + 1, 6);
+    return { ws: ws, freeze: { x: 0, y: 0, topLeft: 'A1' }, cf: [] };
+  }
+
+  // ---------- post-proceso ----------
+  function postProcess(bin, metas) {
+    return JSZip.loadAsync(bin).then(zip => {
+      return zip.file('xl/styles.xml').async('string').then(stylesXml => {
+        const dxfs = '<dxfs count="2">' +
+          '<dxf><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf>' +
+          '<dxf><fill><patternFill><bgColor rgb="FFFFF2CC"/></patternFill></fill></dxf></dxfs>';
+        zip.file('xl/styles.xml', stylesXml.replace('<dxfs count="0"/>', dxfs));
+        let chain = Promise.resolve();
+        metas.forEach((meta, i) => {
+          const path = 'xl/worksheets/sheet' + (i + 1) + '.xml';
+          chain = chain.then(() => zip.file(path).async('string')).then(xml => {
+            if (meta.freeze && meta.freeze.x > 0) {
+              const pane = '<sheetView workbookViewId="0" zoomScale="90"><pane xSplit="' + meta.freeze.x +
+                '" ySplit="' + meta.freeze.y + '" topLeftCell="' + meta.freeze.topLeft +
+                '" activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="' +
+                meta.freeze.topLeft + '" sqref="' + meta.freeze.topLeft + '"/></sheetView>';
+              xml = xml.replace('<sheetView workbookViewId="0"/>', pane);
+            }
+            let prio = 1, cfXml = '';
+            meta.cf.forEach(c => {
+              cfXml += '<conditionalFormatting sqref="' + c.sqref + '">';
+              c.rules.forEach(rr => {
+                cfXml += '<cfRule type="expression" dxfId="' + rr.dxfId + '" priority="' + (prio++) +
+                  '" stopIfTrue="1"><formula>' + esc(rr.formula) + '</formula></cfRule>';
+              });
+              cfXml += '</conditionalFormatting>';
+            });
+            if (cfXml) {
+              if (xml.indexOf('</mergeCells>') >= 0) xml = xml.replace('</mergeCells>', '</mergeCells>' + cfXml);
+              else xml = xml.replace('</sheetData>', '</sheetData>' + cfXml);
+            }
+            zip.file(path, xml);
+          });
+        });
+        return chain.then(() => zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }));
+      });
+    });
+  }
+
+  // ---------- GENERAR ----------
+  function generar(data, mes, anio, reg) {
+    reg = reg || {};
+    const wb = XLSX.utils.book_new();
+    const metas = [];
+
+    const hR = hojaResumen(data, reg, mes, anio);
+    XLSX.utils.book_append_sheet(wb, hR.ws, 'RESUMEN'); metas.push(hR);
+
+    const getValStock = (d, slot, nombre) => {
+      const rd = (reg.stock || {})[fkey(anio, mes, d)]; if (!rd) return '';
+      const rt = rd[slot === 0 ? 'L' : 'N']; if (!rt) return '';
+      const v = rt[nombre];
+      return (v === undefined || v === '') ? '' : (isNaN(parseFloat(v)) ? v : parseFloat(v));
+    };
+    const getExtraStock = (d, slot, xi) => {
+      const rd = (reg.stock || {})[fkey(anio, mes, d)]; if (!rd) return '';
+      const rt = rd[slot === 0 ? 'L' : 'N']; if (!rt) return '';
+      return rt.__resp || '';
+    };
+    const h1 = hojaDiaria(data.stock_minimo_upc, mes, anio, data.unidad,
+      'CONTROL STOCK MÍNIMO UPC',
+      'Conteo por turno. Valores bajo el stock mínimo se pintan rojos automáticamente. L = turno largo/día, N = noche.',
+      2, null, ['RESPONSABLE (iniciales)'], getValStock, getExtraStock);
+    XLSX.utils.book_append_sheet(wb, h1.ws, 'STOCK MÍNIMO UPC'); metas.push(h1);
+
+    const getValE = (d, slot, nombre) => {
+      const rd = (reg.estup || {})[fkey(anio, mes, d)]; if (!rd) return '';
+      const rt = rd[slot < 2 ? 'L' : 'N']; if (!rt || !rt[nombre]) return '';
+      const v = rt[nombre][slot % 2 === 0 ? 'r' : 'e'];
+      return (v === undefined || v === '') ? '' : (isNaN(parseFloat(v)) ? v : parseFloat(v));
+    };
+    const getExtraE = (d, slot, xi) => {
+      const rd = (reg.estup || {})[fkey(anio, mes, d)]; if (!rd) return '';
+      const rt = rd[slot < 2 ? 'L' : 'N']; if (!rt) return '';
+      if (slot % 2 !== 0) return '';
+      const v = [rt.__pac, rt.__receta, rt.__resp][xi];
+      return (v === undefined || v === '') ? '' : (xi === 0 && !isNaN(parseFloat(v)) ? parseFloat(v) : v);
+    };
+    const h2 = hojaDiaria(data.estupefacientes, mes, anio, data.unidad,
+      'CONTROL STOCK ESTUPEFACIENTES',
+      'Rec. = recibo del turno, Ent. = entrega. Valores bajo stock mínimo se pintan rojos.',
+      4, ['Rec.', 'Ent.', 'Rec.', 'Ent.'],
+      ['STOCK DE PACIENTES', 'N° RECETA ACTUAL', 'RESPONSABLE (inicial nombre + apellido)'], getValE, getExtraE);
+    XLSX.utils.book_append_sheet(wb, h2.ws, 'STOCK ESTUPEFACIENTES'); metas.push(h2);
+
+    data.carros.forEach(carro => {
+      const revs = ((reg.carros || {})[carro.hoja] || [])
+        .filter(r => r.fecha && r.fecha.startsWith(anio + '-' + String(mes).padStart(2, '0')))
+        .sort((a, b) => a.fecha < b.fecha ? -1 : 1);
+      const h = hojaCarro(carro, mes, anio, data.unidad, 6, revs);
+      XLSX.utils.book_append_sheet(wb, h.ws, carro.hoja.substring(0, 31)); metas.push(h);
+    });
+
+    const bin = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellDates: false });
+    return postProcess(bin, metas).then(u8 => ({ bytes: u8, nombre: 'PLANILLAS_UPC_' + MESES[mes] + '_' + anio + '.xlsx' }));
+  }
+
+  return { generar: generar, analizar: analizar, MESES: MESES };
+});
+</script>
+<script>
+// ================= conexión central (Supabase) =================
+const SB_URL = 'https://jsxhknlwuxwvdoamtqkh.supabase.co';
+const SB_KEY = 'sb_publishable_IYOEpsuj8Ev4pEOroRT6eg_6gRUg69L';
+const SB_H = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+
+const DEFAULT_DATA = {
+  "unidad": "UPC - Clínica Lo Curro",
+  "stock_minimo_upc": [
+    {"nombre": "Captoprol 25mg", "stock": 4},
+    {"nombre": "Clorpromazina 25mg", "stock": 4},
+    {"nombre": "Cloruro Potasio 1gr", "stock": 5},
+    {"nombre": "Dexmedetomidina 200mcg", "stock": 2},
+    {"nombre": "Espercil 1gr", "stock": 2},
+    {"nombre": "Etomidato 20mg", "stock": 2},
+    {"nombre": "Haloperidol 5mg", "stock": 2},
+    {"nombre": "Labetalol 100mg", "stock": 2},
+    {"nombre": "Lidocaina Gel 2%", "stock": 1},
+    {"nombre": "Nitroglicerina 50mg", "stock": 1},
+    {"nombre": "Noradrenalina 4mg", "stock": 4},
+    {"nombre": "Octaplex 500UI", "stock": 2},
+    {"nombre": "Propofol 2%", "stock": 2},
+    {"nombre": "Urapidil 25mg", "stock": 4},
+    {"nombre": "Urapidil 100mg", "stock": 4},
+    {"nombre": "Lorazepam 4mg", "stock": 2},
+    {"nombre": "Rocuronio 50mg", "stock": 2},
+    {"nombre": "Succinilcolina 100mg", "stock": 2},
+    {"nombre": "Insulina Cristalina", "stock": 1},
+    {"nombre": "Adrenalina Racémica", "stock": 2},
+    {"nombre": "Albúmina 20%", "stock": 4},
+    {"nombre": "Endogel", "stock": 5},
+    {"nombre": "Berodual inh", "stock": 1},
+    {"nombre": "Berodual sol", "stock": 1},
+    {"nombre": "Imán", "stock": 1}
+  ],
+  "estupefacientes": [
+    {"nombre": "Fentanyl 0.5mg/10ml", "stock": 4},
+    {"nombre": "Fentanyl 0.1mg/2ml", "stock": 3},
+    {"nombre": "Midazolam 50mg/10ml", "stock": 4},
+    {"nombre": "Midazolam 5mg/5ml", "stock": 2},
+    {"nombre": "Diazepam 10mg/2ml", "stock": 2},
+    {"nombre": "Morfina 10mg/1ml", "stock": 3},
+    {"nombre": "Propofol 2%", "stock": 2},
+    {"nombre": "Propofol 1%", "stock": 1},
+    {"nombre": "Lidocaina 2%", "stock": 5}
+  ],
+  "carros": [
+    {
+      "hoja": "Carro de paro 1 bandeja",
+      "titulo": "CARRO DE PARO - CAJÓN N° 1 (Bandeja 1)",
+      "secciones": [
+        {"categoria": "Vasoactivos", "items": [
+          {"nombre": "Adrenalina 1mg/1ml", "stock": 20},
+          {"nombre": "Atropina 1mg/1ml", "stock": 10},
+          {"nombre": "Dobutamina 250mg/5ml", "stock": 2},
+          {"nombre": "Dopamina 200mg/5ml", "stock": 2},
+          {"nombre": "Efedrina 60mg/1ml", "stock": 2},
+          {"nombre": "Fenilefrina 0,05mg", "stock": 2},
+          {"nombre": "Fenilefrina 0,5mg/2ml", "stock": 1},
+          {"nombre": "Isoproterenol (Isuprel) 1mg/5ml", "stock": 2},
+          {"nombre": "Isosorbide 10mg/comp", "stock": 4},
+          {"nombre": "Nitroglicerina 10mg (ampolla)", "stock": 1},
+          {"nombre": "Nitroglicerina 50mg (frasco)", "stock": 1},
+          {"nombre": "Noradrenalina (Levophed) 4mg", "stock": 4}
+        ]},
+        {"categoria": "Betabloqueadores + anti HTA", "items": [
+          {"nombre": "Labetalol 100mg", "stock": 3},
+          {"nombre": "Nitroprusiato 50mg", "stock": 1},
+          {"nombre": "Propanolol 1mg", "stock": 2},
+          {"nombre": "Verapamilo 5mg/2ml", "stock": 2}
+        ]},
+        {"categoria": "Antiarrítmicos", "items": [
+          {"nombre": "Adenosina 6mg/2ml", "stock": 4},
+          {"nombre": "Amiodarona 150mg/3ml", "stock": 4},
+          {"nombre": "Cedilanid (Lanactósido C) 4mg/2ml", "stock": 2},
+          {"nombre": "Lidocaína 2%/10ml", "stock": 5}
+        ]},
+        {"categoria": "Otros", "items": [
+          {"nombre": "Aspirina 100mg", "stock": 2},
+          {"nombre": "Betametasona 4mg/1ml", "stock": 4},
+          {"nombre": "Bicarbonato de Sodio 8,4%/20ml", "stock": 4},
+          {"nombre": "Cloruro de calcio 10%/10ml", "stock": 4},
+          {"nombre": "Cloruro de sodio 0,9%/20ml", "stock": 10},
+          {"nombre": "Diazepam 10mg/2ml", "stock": 2},
+          {"nombre": "Esmeron 50mg (refrigerado) - BOTIQ", "stock": 2},
+          {"nombre": "Etomidato (refrigerado) - BOTIQ", "stock": 2},
+          {"nombre": "Famotidina 20mg - BOTIQ", "stock": 2}
+        ]}
+      ]
+    },
+    {
+      "hoja": "Carro de paro 2 bandeja",
+      "titulo": "CARRO DE PARO - CAJÓN N° 1 (Bandeja 2) y CAJÓN N° 2",
+      "secciones": [
+        {"categoria": "Bandeja 2 (medicamentos)", "items": [
+          {"nombre": "Fentanil 0,1mg/2ml", "stock": 2},
+          {"nombre": "Furosemida 20mg/1ml", "stock": 2},
+          {"nombre": "Gluconato de Calcio", "stock": 4},
+          {"nombre": "Glucosa 30%/20ml", "stock": 2},
+          {"nombre": "Hidrocortisona 100mg/fco amp", "stock": 2},
+          {"nombre": "Lanexate 0,5mg/5ml (flumazenil)", "stock": 2},
+          {"nombre": "Naloxona 0,4mg/1ml", "stock": 2},
+          {"nombre": "Propofol 10mg/20ml", "stock": 1},
+          {"nombre": "Succinilcolina 100mg", "stock": 2},
+          {"nombre": "Cloruro de Sodio 10% (10ml)", "stock": 2},
+          {"nombre": "Cloruro de Potasio 10%/10ml", "stock": 4},
+          {"nombre": "Sulfato de magnesio 25%/5ml", "stock": 2}
+        ]},
+        {"categoria": "CAJÓN N° 2 - VÍA AÉREA", "items": [
+          {"nombre": "Ambú con máscara adulto + pediátrica", "stock": "1/1"},
+          {"nombre": "Cánula Mayo 2", "stock": 1},
+          {"nombre": "Cánula Mayo 3", "stock": 1},
+          {"nombre": "Cánula Mayo 4", "stock": 1},
+          {"nombre": "Cánula Mayo 5", "stock": 1},
+          {"nombre": "Cánula Yankahuer", "stock": 1},
+          {"nombre": "TOT # 6,5", "stock": 1},
+          {"nombre": "TOT # 7,0", "stock": 1},
+          {"nombre": "TOT # 7,5", "stock": 1},
+          {"nombre": "TOT # 8,0", "stock": 1},
+          {"nombre": "Fonendoscopio", "stock": 1},
+          {"nombre": "Sonda aspiración 12 FR", "stock": 1},
+          {"nombre": "Sonda aspiración 14 FR", "stock": 1},
+          {"nombre": "Silicona de aspiración 1,8mt", "stock": 1},
+          {"nombre": "Boggie conductor", "stock": 1},
+          {"nombre": "Mascarilla de circulación", "stock": 1},
+          {"nombre": "Mascarilla venturi", "stock": 1},
+          {"nombre": "Pilas C (laringoscopio)", "stock": 4},
+          {"nombre": "Tabla acrílica", "stock": 1},
+          {"nombre": "Balón de oxígeno", "stock": 1},
+          {"nombre": "Pinza Maggil", "stock": 1},
+          {"nombre": "Laringoscopio (hojas 2-3-4)", "stock": 1},
+          {"nombre": "Laringoscopio 3 hojas rectas (McCoy) c/2 hojas carro VA difícil", "stock": 1}
+        ]}
+      ]
+    },
+    {
+      "hoja": "Carro de paro 3-4 bandeja",
+      "titulo": "CARRO DE PARO - CAJÓN N° 3 y CAJÓN N° 4",
+      "secciones": [
+        {"categoria": "CAJÓN N° 3 - VÍA VENOSA", "items": [
+          {"nombre": "Alcohol Sachet", "stock": 10},
+          {"nombre": "Aguja #18", "stock": 10},
+          {"nombre": "Alargador venoso 10 CM", "stock": 2},
+          {"nombre": "Alargador venoso 100 CM", "stock": 2},
+          {"nombre": "Apurador de suero", "stock": 2},
+          {"nombre": "Bajada de suero", "stock": 2},
+          {"nombre": "Guantes estériles 6,5", "stock": 1},
+          {"nombre": "Guantes estériles 7,0", "stock": 1},
+          {"nombre": "Guantes estériles 7,5", "stock": 2},
+          {"nombre": "Guantes estériles 8,0", "stock": 2},
+          {"nombre": "Jeringa 3cc", "stock": 6},
+          {"nombre": "Jeringa 5cc", "stock": 6},
+          {"nombre": "Jeringa 10cc", "stock": 6},
+          {"nombre": "Jeringa 20cc", "stock": 6},
+          {"nombre": "Ligadura", "stock": 1},
+          {"nombre": "Llave de tres pasos", "stock": 3},
+          {"nombre": "Tapas amarillas", "stock": 2},
+          {"nombre": "Tapas rojas", "stock": 2},
+          {"nombre": "Tapas antirreflujo", "stock": 2},
+          {"nombre": "Teflón #14", "stock": 3},
+          {"nombre": "Teflón #16", "stock": 3},
+          {"nombre": "Teflón #18", "stock": 3},
+          {"nombre": "Teflón #20", "stock": 3},
+          {"nombre": "Teflón #22", "stock": 3},
+          {"nombre": "Tegaderm vía venosa", "stock": 3},
+          {"nombre": "Tela transpore", "stock": 1}
+        ]},
+        {"categoria": "CAJÓN N° 4 - SUEROS", "items": [
+          {"nombre": "Bicarbonato de sodio (2/3 molar) 5,6%", "stock": 1},
+          {"nombre": "Suero Fisiológico 100cc", "stock": 1},
+          {"nombre": "Suero Fisiológico 250cc", "stock": 1},
+          {"nombre": "Suero Fisiológico 500cc", "stock": 2},
+          {"nombre": "Suero Fisiológico 1000cc", "stock": 2},
+          {"nombre": "Suero Glucosado 5% 500cc", "stock": 2},
+          {"nombre": "Suero Ringer", "stock": 2}
+        ]}
+      ]
+    }
+  ]
+}
+;
+
+let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} } };
+let cargado = false;
+let ultimaEdicion = 0;
+const pendientes = new Map();   // clave -> {url, body}
+let sincronizando = false;
+
+function estado(txt){ const d=document.getElementById('saveDot'); if(d) d.textContent = txt; }
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+
+async function sbGet(path){
+  const r = await fetch(SB_URL + '/rest/v1/' + path, { headers: SB_H });
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function programarUpsert(clave, tabla, body){
+  pendientes.set(clave, { tabla, body });
+  ultimaEdicion = Date.now();
+  estado('⟳ guardando…');
+  clearTimeout(programarUpsert._t);
+  programarUpsert._t = setTimeout(procesarPendientes, 500);
+}
+async function procesarPendientes(){
+  if(sincronizando || !pendientes.size) return;
+  sincronizando = true;
+  const lote = Array.from(pendientes.entries());
+  try{
+    for(const [clave, p] of lote){
+      const r = await fetch(SB_URL + '/rest/v1/' + p.tabla, {
+        method: 'POST',
+        headers: { ...SB_H, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify([p.body])
+      });
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      pendientes.delete(clave);
+    }
+    estado('● sincronizado');
+  }catch(e){
+    estado('⚠ sin conexión — reintentando…');
+  }finally{
+    sincronizando = false;
+    if(pendientes.size) setTimeout(procesarPendientes, 5000);
+  }
+}
+const nowISO = () => new Date().toISOString();
+function syncStock(fecha, turno){
+  const data = ((STATE.reg.stock[fecha]||{})[turno]) || {};
+  programarUpsert('s:'+fecha+':'+turno, 'upc_reg_stock', { fecha, turno, data, updated_at: nowISO() });
+}
+function syncEstup(fecha, turno){
+  const data = ((STATE.reg.estup[fecha]||{})[turno]) || {};
+  programarUpsert('e:'+fecha+':'+turno, 'upc_reg_estup', { fecha, turno, data, updated_at: nowISO() });
+}
+function syncCarro(hoja, fecha){
+  const rev = (STATE.reg.carros[hoja]||[]).find(r=>r.fecha===fecha) || {resp:'', items:{}};
+  programarUpsert('c:'+hoja+':'+fecha, 'upc_reg_carro', { hoja, fecha, data: { resp: rev.resp||'', items: rev.items||{} }, updated_at: nowISO() });
+}
+function syncConfig(){
+  programarUpsert('config', 'upc_config', { id: 1, data: STATE.config, updated_at: nowISO() });
+}
+function reconstruir(cfgRows, stockRows, estupRows, carroRows){
+  const st = { config: (cfgRows[0] && cfgRows[0].data) || DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} } };
+  stockRows.forEach(r=>{ if(!st.reg.stock[r.fecha]) st.reg.stock[r.fecha]={}; st.reg.stock[r.fecha][r.turno]=r.data||{}; });
+  estupRows.forEach(r=>{ if(!st.reg.estup[r.fecha]) st.reg.estup[r.fecha]={}; st.reg.estup[r.fecha][r.turno]=r.data||{}; });
+  carroRows.forEach(r=>{
+    if(!st.reg.carros[r.hoja]) st.reg.carros[r.hoja]=[];
+    st.reg.carros[r.hoja].push({ fecha: r.fecha, resp: (r.data&&r.data.resp)||'', items: (r.data&&r.data.items)||{} });
+  });
+  return st;
+}
+async function cargarTodo(silencioso){
+  try{
+    const [cfg, st, es, ca] = await Promise.all([
+      sbGet('upc_config?select=*'),
+      sbGet('upc_reg_stock?select=*'),
+      sbGet('upc_reg_estup?select=*'),
+      sbGet('upc_reg_carro?select=*')
+    ]);
+    const nuevo = reconstruir(cfg, st, es, ca);
+    const cambio = JSON.stringify(nuevo) !== JSON.stringify({config: STATE.config, reg: STATE.reg});
+    if(!cargado){
+      STATE = nuevo; cargado = true;
+      document.getElementById('unidad').value = DATA().unidad;
+      estado('● sincronizado'); render();
+    } else if(cambio && !pendientes.size){
+      STATE = nuevo;
+      const ae = document.activeElement;
+      const escribiendo = ae && (ae.tagName==='INPUT' || ae.tagName==='SELECT');
+      if(!escribiendo && Date.now()-ultimaEdicion > 8000){
+        document.getElementById('unidad').value = DATA().unidad;
+        render();
+      }
+      estado('● sincronizado');
+    }
+  }catch(e){
+    if(!cargado){
+      const c = document.getElementById('contenido');
+      c.innerHTML = '';
+      const card = document.createElement('div'); card.className='cargando';
+      card.innerHTML = '<div class="big">⚠️</div><b>No se pudo conectar con la base de datos</b><p class="hint">Revisa la conexión a internet de este computador.</p>';
+      const b = document.createElement('button'); b.className='btn btn-gen'; b.textContent='Reintentar'; b.style.marginTop='14px';
+      b.onclick = ()=>{ c.innerHTML='<div class="cargando"><div class="big">☁️</div><b>Conectando…</b></div>'; cargarTodo(); };
+      card.appendChild(b); c.appendChild(card);
+      estado('⚠ sin conexión');
+    } else if(!silencioso){ estado('⚠ sin conexión — reintentando…'); }
+  }
+}
+setInterval(()=>{ if(cargado) { cargarTodo(true); } }, 45000);
+
+const DATA = () => STATE.config;
+const REG = () => STATE.reg;
+
+const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const hoyISO = () => { const h = new Date(); return h.getFullYear() + '-' + String(h.getMonth()+1).padStart(2,'0') + '-' + String(h.getDate()).padStart(2,'0'); };
+
+// contexto de registro
+let ctx = { fecha: hoyISO(), turno: 'L', fechaE: hoyISO(), turnoE: 'L', carroIdx: 0, fechaC: hoyISO(), tabActiva: 0, tabMaestra: 0 };
+
+// ================= navegación =================
+const TABS = ['📝 Registro diario', '💊 Estupefacientes', '🚑 Carros de paro', '📊 Panel', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
+function renderTabs(){
+  const nav = document.getElementById('tabs'); nav.innerHTML = '';
+  TABS.forEach((t,i)=>{
+    const el = document.createElement('div');
+    el.className = 'tab' + (i===ctx.tabActiva ? ' act' : '');
+    el.textContent = t;
+    el.onclick = ()=>{ ctx.tabActiva = i; render(); };
+    nav.appendChild(el);
+  });
+}
+function render(){
+  if(!cargado) return;
+  renderTabs();
+  const c = document.getElementById('contenido'); c.innerHTML = '';
+  [renderRegistro, renderEstup, renderCarros, renderPanel, renderExcel, renderMaestra, renderRespaldo][ctx.tabActiva](c);
+}
+
+// helpers de dom
+function el(tag, cls, txt){ const e = document.createElement(tag); if(cls) e.className = cls; if(txt!==undefined) e.textContent = txt; return e; }
+function ctrl(labelTxt, input){ const d = el('div'); const l = el('label','lbl',labelTxt); d.append(l, input); return d; }
+
+// ================= TAB 1: registro diario =================
+function renderRegistro(c){
+  const card = el('div','card');
+  const fc = el('div','fila-ctrl');
+  const inF = el('input'); inF.type='date'; inF.value=ctx.fecha; inF.onchange=e=>{ctx.fecha=e.target.value; render();};
+  const tg = el('div','turno-tg');
+  ['L','N'].forEach(t=>{
+    const b = el('button', t===ctx.turno?'act':'', t==='L'?'☀ Turno L':'🌙 Turno N');
+    b.onclick=()=>{ctx.turno=t; render();};
+    tg.appendChild(b);
+  });
+  const rd = ((REG().stock[ctx.fecha]||{})[ctx.turno]) || {};
+  const inR = el('input'); inR.type='text'; inR.placeholder='Iniciales'; inR.style.width='110px'; inR.value = rd.__resp || '';
+  inR.oninput = e=>{ setReg('stock', ctx.fecha, ctx.turno, '__resp', e.target.value); };
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR));
+  card.appendChild(fc);
+  card.appendChild(el('p','hint','Anota solo el conteo. Si queda bajo el stock mínimo, se marca rojo al instante. Todo se guarda en la base central: todos los computadores ven lo mismo.'));
+  c.appendChild(card);
+
+  const card2 = el('div','card');
+  const tabla = el('table');
+  tabla.innerHTML = '<thead><tr><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Conteo</th></tr></thead>';
+  const tb = el('tbody');
+  DATA().stock_minimo_upc.forEach(it=>{
+    const tr = el('tr');
+    tr.appendChild(el('td','',it.nombre));
+    tr.appendChild(el('td','min',String(it.stock)));
+    const td = el('td','entrada');
+    const inp = el('input'); inp.type='number'; inp.min='0'; inp.value = rd[it.nombre] !== undefined ? rd[it.nombre] : '';
+    const marca = ()=>{ const v=parseFloat(inp.value); inp.classList.toggle('bajo', !isNaN(v) && typeof it.stock==='number' && v<it.stock); };
+    marca();
+    inp.oninput = e=>{ setReg('stock', ctx.fecha, ctx.turno, it.nombre, e.target.value); marca(); };
+    td.appendChild(inp); tr.appendChild(td); tb.appendChild(tr);
+  });
+  tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
+}
+function setReg(tipo, fecha, turno, clave, valor){
+  const R = REG();
+  if(!R[tipo][fecha]) R[tipo][fecha] = {};
+  if(!R[tipo][fecha][turno]) R[tipo][fecha][turno] = {};
+  if(valor === '' || valor === undefined) delete R[tipo][fecha][turno][clave];
+  else R[tipo][fecha][turno][clave] = valor;
+  (tipo === 'stock' ? syncStock : syncEstup)(fecha, turno);
+}
+
+// ================= TAB 2: estupefacientes =================
+function renderEstup(c){
+  const card = el('div','card');
+  const fc = el('div','fila-ctrl');
+  const inF = el('input'); inF.type='date'; inF.value=ctx.fechaE; inF.onchange=e=>{ctx.fechaE=e.target.value; render();};
+  const tg = el('div','turno-tg');
+  ['L','N'].forEach(t=>{
+    const b = el('button', t===ctx.turnoE?'act':'', t==='L'?'☀ Turno L':'🌙 Turno N');
+    b.onclick=()=>{ctx.turnoE=t; render();};
+    tg.appendChild(b);
+  });
+  const rd = ((REG().estup[ctx.fechaE]||{})[ctx.turnoE]) || {};
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg));
+  card.appendChild(fc);
+  card.appendChild(el('p','hint','Recibo = lo que cuentas al RECIBIR el turno. Entrega = lo que cuentas al ENTREGAR. Bajo mínimo se marca rojo.'));
+  c.appendChild(card);
+
+  const card2 = el('div','card');
+  const tabla = el('table');
+  tabla.innerHTML = '<thead><tr><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Recibo</th><th style="text-align:center">Entrega</th></tr></thead>';
+  const tb = el('tbody');
+  DATA().estupefacientes.forEach(it=>{
+    const tr = el('tr');
+    tr.appendChild(el('td','',it.nombre));
+    tr.appendChild(el('td','min',String(it.stock)));
+    ['r','e'].forEach(k=>{
+      const td = el('td','entrada');
+      const inp = el('input'); inp.type='number'; inp.min='0';
+      inp.value = rd[it.nombre] && rd[it.nombre][k] !== undefined ? rd[it.nombre][k] : '';
+      const marca = ()=>{ const v=parseFloat(inp.value); inp.classList.toggle('bajo', !isNaN(v) && typeof it.stock==='number' && v<it.stock); };
+      marca();
+      inp.oninput = e=>{
+        const R = REG();
+        if(!R.estup[ctx.fechaE]) R.estup[ctx.fechaE]={};
+        if(!R.estup[ctx.fechaE][ctx.turnoE]) R.estup[ctx.fechaE][ctx.turnoE]={};
+        const o = R.estup[ctx.fechaE][ctx.turnoE][it.nombre] || {};
+        if(e.target.value==='') delete o[k]; else o[k]=e.target.value;
+        if(Object.keys(o).length) R.estup[ctx.fechaE][ctx.turnoE][it.nombre]=o; else delete R.estup[ctx.fechaE][ctx.turnoE][it.nombre];
+        syncEstup(ctx.fechaE, ctx.turnoE); marca();
+      };
+      td.appendChild(inp); tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  tabla.appendChild(tb); card2.appendChild(tabla);
+  const extra = el('div','estup-extra');
+  [['__pac','Stock de pacientes','number'],['__receta','N° receta actual','text'],['__resp','Responsable (iniciales)','text']].forEach(([k,lbl,tp])=>{
+    const inp = el('input'); inp.type=tp; inp.value = rd[k]||'';
+    inp.oninput = e=>setReg('estup', ctx.fechaE, ctx.turnoE, k, e.target.value);
+    extra.appendChild(ctrl(lbl, inp));
+  });
+  card2.appendChild(extra);
+  c.appendChild(card2);
+}
+
+// ================= TAB 3: carros =================
+function venceClase(v){
+  if(!v) return '';
+  const dv = new Date(v+'T00:00:00'), dias = Math.round((dv - new Date())/86400000);
+  if(dias <= 0) return 'venc-rojo';
+  if(dias <= 30) return 'venc-ambar';
+  return '';
+}
+function renderCarros(c){
+  const card = el('div','card');
+  const fc = el('div','fila-ctrl');
+  const sel = el('select');
+  DATA().carros.forEach((cr,i)=>{ const o=el('option','',cr.hoja); o.value=i; sel.appendChild(o); });
+  sel.value = ctx.carroIdx;
+  sel.onchange = e=>{ ctx.carroIdx = +e.target.value; render(); };
+  const inF = el('input'); inF.type='date'; inF.value=ctx.fechaC; inF.onchange=e=>{ctx.fechaC=e.target.value; render();};
+  const carro = DATA().carros[ctx.carroIdx];
+  const rev = getRev(carro.hoja, ctx.fechaC);
+  const inR = el('input'); inR.type='text'; inR.placeholder='Iniciales'; inR.style.width='110px'; inR.value = rev.resp || '';
+  inR.oninput = e=>{ getRev(carro.hoja, ctx.fechaC).resp = e.target.value; syncCarro(carro.hoja, ctx.fechaC); };
+  fc.append(ctrl('Carro', sel), ctrl('Fecha de revisión', inF), ctrl('Responsable', inR));
+  card.appendChild(fc);
+  card.appendChild(el('p','hint','Anota cantidad y vencimiento más próximo de cada ítem. Rojo = bajo stock o vencido; ámbar = vence dentro de 30 días. Cada fecha distinta crea una nueva revisión (el Excel del mes muestra hasta 6).'));
+  c.appendChild(card);
+
+  const card2 = el('div','card');
+  const tabla = el('table');
+  tabla.innerHTML = '<thead><tr><th>Ítem</th><th style="text-align:center">Stock</th><th style="text-align:center">Cantidad</th><th style="text-align:center">Vencimiento</th></tr></thead>';
+  const tb = el('tbody');
+  carro.secciones.forEach(sec=>{
+    const trc = el('tr','cat-row');
+    const tdc = el('td','',sec.categoria); tdc.colSpan=4; trc.appendChild(tdc); tb.appendChild(trc);
+    sec.items.forEach(it=>{
+      const tr = el('tr');
+      tr.appendChild(el('td','',it.nombre));
+      tr.appendChild(el('td','min',String(it.stock)));
+      const dat = rev.items[it.nombre] || {};
+      const tdC = el('td','entrada');
+      const inC = el('input'); inC.type='number'; inC.min='0'; inC.value = dat.c!==undefined?dat.c:'';
+      const marcaC = ()=>{ const v=parseFloat(inC.value); inC.classList.toggle('bajo', !isNaN(v)&&typeof it.stock==='number'&&v<it.stock); };
+      marcaC();
+      inC.oninput = e=>{ setRevItem(carro.hoja, ctx.fechaC, it.nombre, 'c', e.target.value); marcaC(); };
+      tdC.appendChild(inC); tr.appendChild(tdC);
+      const tdV = el('td','entrada');
+      const inV = el('input'); inV.type='date'; inV.value = dat.v||'';
+      inV.className = venceClase(dat.v);
+      inV.onchange = e=>{ setRevItem(carro.hoja, ctx.fechaC, it.nombre, 'v', e.target.value); inV.className = venceClase(e.target.value); };
+      tdV.appendChild(inV); tr.appendChild(tdV);
+      tb.appendChild(tr);
+    });
+  });
+  tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
+}
+function getRev(hoja, fecha){
+  const R = REG();
+  if(!R.carros[hoja]) R.carros[hoja]=[];
+  let rev = R.carros[hoja].find(r=>r.fecha===fecha);
+  if(!rev){ rev = {fecha:fecha, resp:'', items:{}}; R.carros[hoja].push(rev); }
+  if(!rev.items) rev.items={};
+  return rev;
+}
+function setRevItem(hoja, fecha, nombre, k, v){
+  const rev = getRev(hoja, fecha);
+  const o = rev.items[nombre] || {};
+  if(v==='') delete o[k]; else o[k]=v;
+  if(Object.keys(o).length) rev.items[nombre]=o; else delete rev.items[nombre];
+  syncCarro(hoja, fecha);
+}
+
+// ================= TAB 4: panel =================
+function renderPanel(c){
+  const fc = el('div','card');
+  const fr = el('div','fila-ctrl');
+  const selM = el('select'); MESES_N.forEach((m,i)=>{const o=el('option','',m);o.value=i+1;selM.appendChild(o);});
+  const h = new Date();
+  if(ctx.panelMes===undefined){ ctx.panelMes = h.getMonth()+1; ctx.panelAnio = h.getFullYear(); }
+  selM.value = ctx.panelMes;
+  selM.onchange = e=>{ ctx.panelMes=+e.target.value; render(); };
+  const inA = el('input'); inA.type='number'; inA.value=ctx.panelAnio; inA.style.width='100px';
+  inA.onchange = e=>{ ctx.panelAnio=+e.target.value; render(); };
+  fr.append(ctrl('Mes', selM), ctrl('Año', inA));
+  fc.appendChild(fr); c.appendChild(fc);
+
+  if(typeof UPCGen==='undefined'||!UPCGen){ const w=el('div','card'); w.appendChild(el('p','hint','⚠ No se pudieron cargar los componentes del panel. Revisa la conexión y recarga la página (F5).')); c.appendChild(w); return; }
+  const A = UPCGen.analizar(DATA(), REG(), ctx.panelMes, ctx.panelAnio);
+  const pct = A.turnosPosibles ? Math.round(A.turnosReg/A.turnosPosibles*100) : 0;
+  const venc30 = A.carros.reduce((s,cr)=>s+cr.vencen.filter(v=>v.dias<=30).length,0);
+  const kpis = el('div','kpis');
+  [[A.turnosReg+' / '+A.turnosPosibles, 'Turnos con registro ('+pct+'%)', false],
+   [String(Object.keys(A.quiebres).length), 'Medicamentos con quiebres', Object.keys(A.quiebres).length>0],
+   [String(Object.keys(A.quiebresE).length), 'Estupefacientes con quiebres', Object.keys(A.quiebresE).length>0],
+   [String(A.carros.reduce((s,cr)=>s+cr.revisionesMes,0)), 'Revisiones de carro', false],
+   [String(venc30), 'Vencen en ≤30 días', venc30>0]
+  ].forEach(([v,l,alerta])=>{
+    const k = el('div','kpi'+(alerta?' alerta':''));
+    k.appendChild(el('div','v',v)); k.appendChild(el('div','l',l));
+    kpis.appendChild(k);
+  });
+  c.appendChild(kpis);
+
+  const card = el('div','card');
+  card.appendChild(el('h3','sec','🔴 Medicamentos bajo stock mínimo en el mes'));
+  const qs = Object.keys(A.quiebres).sort((a,b)=>A.quiebres[b].veces-A.quiebres[a].veces);
+  const qe = Object.keys(A.quiebresE).sort((a,b)=>A.quiebresE[b].veces-A.quiebresE[a].veces);
+  if(!qs.length && !qe.length) card.appendChild(el('div','alert-item okk','Sin quiebres registrados este mes ✔'));
+  qs.forEach(n=>{ const q=A.quiebres[n];
+    const d=el('div','alert-item rojo'); d.appendChild(el('span','',n));
+    d.appendChild(el('span','', q.veces+' veces · último: '+q.ultimo+' (mín '+q.min+')')); card.appendChild(d); });
+  qe.forEach(n=>{ const q=A.quiebresE[n];
+    const d=el('div','alert-item rojo'); d.appendChild(el('span','','💊 '+n));
+    d.appendChild(el('span','', q.veces+' veces · último: '+q.ultimo+' (mín '+q.min+')')); card.appendChild(d); });
+  c.appendChild(card);
+
+  const card2 = el('div','card');
+  card2.appendChild(el('h3','sec','⏳ Vencimientos próximos (carros de paro, según última revisión)'));
+  let hayV=false;
+  A.carros.forEach(cr=>cr.vencen.forEach(v=>{
+    hayV=true;
+    const d=el('div','alert-item '+(v.dias<=30?'rojo':'ambar'));
+    d.appendChild(el('span','', v.nombre+' — '+cr.hoja));
+    d.appendChild(el('span','', v.dias<=0 ? '¡VENCIDO! ('+v.venc+')' : 'vence en '+v.dias+' días ('+v.venc+')'));
+    card2.appendChild(d);
+  }));
+  if(!hayV) card2.appendChild(el('div','alert-item okk','Sin vencimientos en los próximos 60 días ✔'));
+  c.appendChild(card2);
+
+  const card3 = el('div','card');
+  card3.appendChild(el('h3','sec','🚑 Estado de carros de paro'));
+  A.carros.forEach(cr=>{
+    const d=el('div','alert-item '+(cr.bajos.length? 'rojo': (cr.ultima?'okk':'ambar')));
+    d.appendChild(el('span','', cr.hoja));
+    d.appendChild(el('span','', (cr.ultima? 'última rev. '+cr.ultima : 'sin revisiones') + ' · '+cr.revisionesMes+' rev. este mes · '+cr.bajos.length+' ítems bajo stock'));
+    card3.appendChild(d);
+  });
+  c.appendChild(card3);
+}
+
+// ================= TAB 5: excel =================
+function renderExcel(c){
+  const card = el('div','card');
+  const fr = el('div','fila-ctrl');
+  const selM = el('select'); MESES_N.forEach((m,i)=>{const o=el('option','',m);o.value=i+1;selM.appendChild(o);});
+  const h = new Date();
+  if(ctx.exMes===undefined){ ctx.exMes = h.getMonth()+1; ctx.exAnio = h.getFullYear(); }
+  selM.value = ctx.exMes; selM.onchange=e=>{ctx.exMes=+e.target.value;};
+  const inA = el('input'); inA.type='number'; inA.value=ctx.exAnio; inA.style.width='100px'; inA.onchange=e=>{ctx.exAnio=+e.target.value;};
+  const chk = el('input'); chk.type='checkbox'; chk.checked=true; chk.id='chkDatos'; chk.style.width='auto';
+  const b = el('button','btn btn-gen','⬇ Generar Excel del mes');
+  b.onclick = ()=>{
+    if(typeof UPCGen==='undefined'||!UPCGen){ toast('⚠ Componentes no cargados. Revisa internet y recarga (F5).'); return; }
+    toast('Generando Excel…');
+    UPCGen.generar(DATA(), ctx.exMes, ctx.exAnio, chk.checked ? REG() : {}).then(r=>{
+      const blob = new Blob([r.bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=r.nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+      toast('✅ '+r.nombre+' descargado');
+    }).catch(e=>{console.error(e); toast('Error: '+e.message);});
+  };
+  fr.append(ctrl('Mes', selM), ctrl('Año', inA), b);
+  card.appendChild(fr);
+  const lch = el('label'); lch.style.cssText='display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13.5px;color:var(--gris)';
+  lch.append(chk, document.createTextNode('Incluir los datos ya registrados (si lo desmarcas, sale la planilla en blanco para llenar a mano)'));
+  card.appendChild(lch);
+  card.appendChild(el('p','hint','El archivo incluye 6 hojas: RESUMEN (informe automático con quiebres, cobertura y vencimientos) + Stock Mínimo + Estupefacientes + los 3 carros, con los datos registrados por todo el equipo ya puestos en su lugar y alertas en rojo.'));
+  c.appendChild(card);
+}
+
+// ================= TAB 6: lista maestra =================
+function renderMaestra(c){
+  const card = el('div','card');
+  const tabs = el('div','fila-ctrl');
+  const nombres = ['Stock Mínimo UPC','Estupefacientes', ...DATA().carros.map(cr=>cr.hoja.replace('Carro de paro','Carro'))];
+  nombres.forEach((n,i)=>{
+    const t = el('div','tab'+(i===ctx.tabMaestra?' act':''), n);
+    t.onclick=()=>{ctx.tabMaestra=i; render();};
+    tabs.appendChild(t);
+  });
+  card.appendChild(tabs);
+  card.appendChild(el('p','hint','Aquí defines QUÉ se controla y con qué stock mínimo. Los cambios se guardan en la base central y aplican para todo el equipo.'));
+  c.appendChild(card);
+
+  const card2 = el('div','card');
+  const tabla = el('table');
+  tabla.innerHTML='<thead><tr><th>Medicamento / Insumo</th><th style="text-align:center">Stock mín</th><th></th></tr></thead>';
+  const tb = el('tbody');
+  function filaItem(item, lista){
+    const tr = el('tr');
+    const td1 = el('td'); const i1 = el('input'); i1.className='nom'; i1.value=item.nombre; i1.oninput=e=>{item.nombre=e.target.value; syncConfig();}; td1.appendChild(i1);
+    const td2 = el('td','entrada'); const i2 = el('input'); i2.value=item.stock; i2.oninput=e=>{const n=parseFloat(e.target.value); item.stock=isNaN(n)?e.target.value:n; syncConfig();}; td2.appendChild(i2);
+    const td3 = el('td','del'); const bd = el('button','btn-mini','✕'); bd.onclick=()=>{const ix=lista.indexOf(item); if(ix>=0){lista.splice(ix,1); syncConfig(); render();}}; td3.appendChild(bd);
+    tr.append(td1,td2,td3); return tr;
+  }
+  if(ctx.tabMaestra < 2){
+    const lista = ctx.tabMaestra===0 ? DATA().stock_minimo_upc : DATA().estupefacientes;
+    lista.forEach(it=>tb.appendChild(filaItem(it, lista)));
+    tabla.appendChild(tb); card2.appendChild(tabla);
+    const add = el('button','btn-add','+ Agregar ítem');
+    add.onclick=()=>{lista.push({nombre:'',stock:1}); syncConfig(); render();};
+    card2.appendChild(add);
+  } else {
+    const carro = DATA().carros[ctx.tabMaestra-2];
+    carro.secciones.forEach(sec=>{
+      const trc = el('tr','cat-row'); const tdc = el('td'); tdc.colSpan=3;
+      const ic = el('input'); ic.className='nom'; ic.value=sec.categoria; ic.oninput=e=>{sec.categoria=e.target.value; syncConfig();};
+      tdc.appendChild(ic); trc.appendChild(tdc); tb.appendChild(trc);
+      sec.items.forEach(it=>tb.appendChild(filaItem(it, sec.items)));
+      const tra = el('tr'); const tda = el('td'); tda.colSpan=3;
+      const add = el('button','btn-add','+ Agregar a "'+sec.categoria+'"');
+      add.onclick=()=>{sec.items.push({nombre:'',stock:1}); syncConfig(); render();};
+      tda.appendChild(add); tra.appendChild(tda); tb.appendChild(tra);
+    });
+    tabla.appendChild(tb); card2.appendChild(tabla);
+  }
+  c.appendChild(card2);
+}
+
+// ================= TAB 7: respaldo =================
+function renderRespaldo(c){
+  const card = el('div','card');
+  card.appendChild(el('h3','sec','💾 Respaldo de la base central'));
+  const fr = el('div','fila-ctrl');
+  const b1 = el('button','btn btn-sec','⬇ Descargar respaldo completo (JSON)');
+  b1.onclick = ()=>{
+    const blob = new Blob([JSON.stringify({config: STATE.config, reg: STATE.reg},null,2)],{type:'application/json'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download = 'respaldo_sistema_UPC_'+hoyISO()+'.json'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('Respaldo descargado');
+  };
+  const b2 = el('button','btn btn-sec','📂 Restaurar desde respaldo');
+  const fi = el('input'); fi.type='file'; fi.accept='.json'; fi.style.display='none';
+  fi.onchange = ev=>{
+    const f = ev.target.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = ()=>{
+      try{
+        const d = JSON.parse(r.result);
+        if(!d.config || !d.reg) throw new Error('formato no válido');
+        if(!confirm('Esto reemplazará los datos de TODO el equipo con el respaldo. ¿Continuar?')) return;
+        STATE.config = d.config; STATE.reg = d.reg;
+        syncConfig();
+        Object.keys(STATE.reg.stock).forEach(f2=>Object.keys(STATE.reg.stock[f2]).forEach(t=>syncStock(f2,t)));
+        Object.keys(STATE.reg.estup).forEach(f2=>Object.keys(STATE.reg.estup[f2]).forEach(t=>syncEstup(f2,t)));
+        Object.keys(STATE.reg.carros).forEach(h2=>STATE.reg.carros[h2].forEach(rv=>syncCarro(h2, rv.fecha)));
+        render(); toast('✅ Respaldo restaurado y sincronizado');
+      }catch(e){ toast('Archivo no válido: '+e.message); }
+    };
+    r.readAsText(f); ev.target.value='';
+  };
+  b2.onclick = ()=>fi.click();
+  fr.append(b1,b2,fi);
+  card.appendChild(fr);
+  card.appendChild(el('p','hint','Los datos viven en la base central (Supabase): todos los computadores ven y editan lo mismo, en línea. Descarga un respaldo de vez en cuando como copia de seguridad.'));
+  c.appendChild(card);
+
+  const card2 = el('div','card');
+  card2.appendChild(el('h3','sec','ℹ Cómo compartir el sistema'));
+  card2.appendChild(el('p','hint','Comparte este mismo archivo (o su enlace si está publicado como página web) con el equipo. Cada persona lo abre en su navegador y trabaja sobre los mismos datos. Requiere internet.'));
+  c.appendChild(card2);
+}
+
+// ================= init =================
+document.getElementById('unidad').addEventListener('input', e=>{ DATA().unidad = e.target.value; syncConfig(); });
+cargarTodo();
+</script>
+</body>
+</html>
