@@ -751,6 +751,12 @@ async function procesarPendientes(){
     if(pendientes.size) setTimeout(procesarPendientes, 5000);
   }
 }
+async function guardarAhora(){
+  clearTimeout(programarUpsert._t);
+  await procesarPendientes();
+  if(!pendientes.size){ estado('● sincronizado'); toast('✅ Información guardada en la base central'); }
+  else { toast('⚠ Sin conexión: los datos quedaron en cola y se guardarán al reconectar'); }
+}
 const nowISO = () => new Date().toISOString();
 function syncStock(fecha, turno){
   const data = ((STATE.reg.stock[fecha]||{})[turno]) || {};
@@ -895,9 +901,11 @@ function renderRegistro(c){
   });
   const rd = ((REG().stock[ctx.fecha]||{})[ctx.turno]) || {};
   const inR = selResp(rd.__resp || '', v=>{ setReg('stock', ctx.fecha, ctx.turno, '__resp', v); });
-  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR));
+  const bG = el('button','btn btn-gen','💾 Guardar');
+  bG.onclick = guardarAhora;
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR), bG);
   card.appendChild(fc);
-  card.appendChild(el('p','hint','Anota solo el conteo. Si queda bajo el stock mínimo, se marca rojo al instante. Todo se guarda en la base central: todos los computadores ven lo mismo.'));
+  card.appendChild(el('p','hint','Anota solo el conteo. Si queda bajo el stock mínimo, se marca rojo al instante. Al terminar, presiona Guardar para confirmar el registro en la base central.'));
   c.appendChild(card);
 
   const card2 = el('div','card');
@@ -939,7 +947,9 @@ function renderEstup(c){
     tg.appendChild(b);
   });
   const rd = ((REG().estup[ctx.fechaE]||{})[ctx.turnoE]) || {};
-  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg));
+  const bG = el('button','btn btn-gen','💾 Guardar');
+  bG.onclick = guardarAhora;
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), bG);
   card.appendChild(fc);
   card.appendChild(el('p','hint','Recibo = lo que cuentas al RECIBIR el turno. Entrega = lo que cuentas al ENTREGAR. Bajo mínimo se marca rojo.'));
   c.appendChild(card);
@@ -1003,7 +1013,9 @@ function renderCarros(c){
   const carro = DATA().carros[ctx.carroIdx];
   const rev = getRev(carro.hoja, ctx.fechaC);
   const inR = selResp(rev.resp || '', v=>{ getRev(carro.hoja, ctx.fechaC).resp = v; syncCarro(carro.hoja, ctx.fechaC); });
-  fc.append(ctrl('Carro', sel), ctrl('Fecha de revisión', inF), ctrl('Responsable', inR));
+  const bG = el('button','btn btn-gen','💾 Guardar');
+  bG.onclick = guardarAhora;
+  fc.append(ctrl('Carro', sel), ctrl('Fecha de revisión', inF), ctrl('Responsable', inR), bG);
   card.appendChild(fc);
   card.appendChild(el('p','hint','Anota cantidad y vencimiento más próximo de cada ítem. Rojo = bajo stock o vencido; ámbar = vence dentro de 30 días. Cada fecha distinta crea una nueva revisión (el Excel del mes muestra hasta 6).'));
   c.appendChild(card);
