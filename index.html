@@ -1005,8 +1005,17 @@ function renderEstup(c){
   });
   tabla.appendChild(tb); card2.appendChild(tabla);
   const extra = el('div','estup-extra');
+  const tPac = el('textarea'); tPac.placeholder='Nombre(s) de paciente(s)…'; tPac.rows = 1;
+  tPac.style.cssText = 'padding:8px 10px; border:1px solid var(--borde); border-radius:7px; font-size:14px; font-family:inherit; resize:vertical; min-height:38px; width:100%; box-sizing:border-box;';
+  tPac.value = rd.__pacientes || '';
+  function ajustaAlto(){ tPac.style.height='auto'; tPac.style.height = Math.max(38, tPac.scrollHeight) + 'px'; }
+  tPac.oninput = e=>{ setReg('estup', ctx.fechaE, ctx.turnoE, '__pacientes', e.target.value); ajustaAlto(); };
+  const cPac = ctrl('Paciente', tPac); cPac.style.gridColumn = '1 / -1';
+  extra.appendChild(cPac);
+  setTimeout(ajustaAlto, 0);
   [['__pac','Stock de pacientes','number'],['__receta','N° receta actual','text']].forEach(([k,lbl,tp])=>{
     const inp = el('input'); inp.type=tp; inp.value = rd[k]||'';
+    if(k === '__pac'){ inp.style.width = '90px'; }
     inp.oninput = e=>setReg('estup', ctx.fechaE, ctx.turnoE, k, e.target.value);
     extra.appendChild(ctrl(lbl, inp));
   });
