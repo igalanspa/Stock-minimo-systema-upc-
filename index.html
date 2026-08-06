@@ -917,7 +917,7 @@ function renderRegistro(c){
 
   const card2 = el('div','card');
   const tabla = el('table');
-  tabla.innerHTML = '<thead><tr><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Conteo</th></tr></thead>';
+  tabla.innerHTML = '<thead><tr><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Conteo</th><th style="text-align:center">Vencimiento</th></tr></thead>';
   const tb = el('tbody');
   DATA().stock_minimo_upc.forEach(it=>{
     const tr = el('tr');
@@ -928,7 +928,15 @@ function renderRegistro(c){
     const marca = ()=>{ const v=parseFloat(inp.value); inp.classList.toggle('bajo', !isNaN(v) && typeof it.stock==='number' && v<it.stock); };
     marca();
     inp.oninput = e=>{ setReg('stock', ctx.fecha, ctx.turno, it.nombre, e.target.value); marca(); };
-    td.appendChild(inp); tr.appendChild(td); tb.appendChild(tr);
+    td.appendChild(inp); tr.appendChild(td);
+    const tdV = el('td','entrada');
+    const inV = el('input'); inV.type='date';
+    if(!DATA().vencStock) DATA().vencStock = {};
+    inV.value = DATA().vencStock[it.nombre] || '';
+    inV.className = venceClase(inV.value);
+    inV.onchange = e=>{ DATA().vencStock[it.nombre] = e.target.value; syncConfig(); inV.className = venceClase(e.target.value); };
+    tdV.appendChild(inV); tr.appendChild(tdV);
+    tb.appendChild(tr);
   });
   tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
 }
