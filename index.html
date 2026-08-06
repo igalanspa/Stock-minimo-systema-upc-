@@ -501,14 +501,14 @@
       const rd = (reg.estup || {})[fkey(anio, mes, d)]; if (!rd) return '';
       const rt = rd[slot < 2 ? 'L' : 'N']; if (!rt) return '';
       if (slot % 2 !== 0) return '';
-      const v = [rt.__pac, rt.__receta, rt.__resp][xi];
+      const v = [rt.__pac, rt.__resp][xi];
       return (v === undefined || v === '') ? '' : (xi === 0 && !isNaN(parseFloat(v)) ? parseFloat(v) : v);
     };
     const h2 = hojaDiaria(data.estupefacientes, mes, anio, data.unidad,
       'CONTROL STOCK ESTUPEFACIENTES',
       'Rec. = recibo del turno, Ent. = entrega. Valores bajo stock mínimo se pintan rojos.',
       4, ['Rec.', 'Ent.', 'Rec.', 'Ent.'],
-      ['STOCK DE PACIENTES', 'N° RECETA ACTUAL', 'RESPONSABLE (inicial nombre + apellido)'], getValE, getExtraE);
+      ['STOCK DE PACIENTES', 'RESPONSABLE (inicial nombre + apellido)'], getValE, getExtraE);
     XLSX.utils.book_append_sheet(wb, h2.ws, 'STOCK ESTUPEFACIENTES'); metas.push(h2);
 
     data.carros.forEach(carro => {
@@ -1013,7 +1013,7 @@ function renderEstup(c){
   const cPac = ctrl('Paciente', tPac); cPac.style.gridColumn = '1 / -1';
   extra.appendChild(cPac);
   setTimeout(ajustaAlto, 0);
-  [['__pac','Stock de pacientes','number'],['__receta','N° receta actual','text']].forEach(([k,lbl,tp])=>{
+  [['__pac','Stock de pacientes','number']].forEach(([k,lbl,tp])=>{
     const inp = el('input'); inp.type=tp; inp.value = rd[k]||'';
     if(k === '__pac'){ inp.style.width = '90px'; }
     inp.oninput = e=>setReg('estup', ctx.fechaE, ctx.turnoE, k, e.target.value);
