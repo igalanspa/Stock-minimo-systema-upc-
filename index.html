@@ -708,7 +708,7 @@ const DEFAULT_DATA = {
 }
 ;
 
-let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} } };
+let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} }, bodegas: {} };
 let cargado = false;
 let ultimaEdicion = 0;
 const pendientes = new Map();   // clave -> {url, body}
@@ -773,6 +773,10 @@ function syncCarro(hoja, fecha){
 function syncConfig(){
   programarUpsert('config', 'upc_config', { id: 1, data: STATE.config, updated_at: nowISO() });
 }
+const BODEGAS = () => { if(!STATE.bodegas) STATE.bodegas = {}; return STATE.bodegas; };
+function syncBodega(nombre){
+  programarUpsert('b:'+nombre, 'upc_bodegas', { bodega: nombre, data: { items: BODEGAS()[nombre] || [] }, updated_at: nowISO() });
+}
 function reconstruir(cfgRows, stockRows, estupRows, carroRows){
   const st = { config: (cfgRows[0] && cfgRows[0].data) || DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} } };
   stockRows.forEach(r=>{ if(!st.reg.stock[r.fecha]) st.reg.stock[r.fecha]={}; st.reg.stock[r.fecha][r.turno]=r.data||{}; });
@@ -785,14 +789,17 @@ function reconstruir(cfgRows, stockRows, estupRows, carroRows){
 }
 async function cargarTodo(silencioso){
   try{
-    const [cfg, st, es, ca] = await Promise.all([
+    const [cfg, st, es, ca, bo] = await Promise.all([
       sbGet('upc_config?select=*'),
       sbGet('upc_reg_stock?select=*'),
       sbGet('upc_reg_estup?select=*'),
-      sbGet('upc_reg_carro?select=*')
+      sbGet('upc_reg_carro?select=*'),
+      sbGet('upc_bodegas?select=*')
     ]);
     const nuevo = reconstruir(cfg, st, es, ca);
-    const cambio = JSON.stringify(nuevo) !== JSON.stringify({config: STATE.config, reg: STATE.reg});
+    nuevo.bodegas = {};
+    bo.forEach(r=>{ nuevo.bodegas[r.bodega] = (r.data && r.data.items) ? r.data.items : []; });
+    const cambio = JSON.stringify(nuevo) !== JSON.stringify({config: STATE.config, reg: STATE.reg, bodegas: STATE.bodegas || {}});
     if(!cargado){
       STATE = nuevo; cargado = true;
       document.getElementById('unidad').value = DATA().unidad;
@@ -865,7 +872,7 @@ const hoyISO = () => { const h = new Date(); return h.getFullYear() + '-' + Stri
 let ctx = { fecha: hoyISO(), turno: 'L', fechaE: hoyISO(), turnoE: 'L', carroIdx: 0, fechaC: hoyISO(), tabActiva: 0, tabMaestra: 0 };
 
 // ================= navegación =================
-const TABS = ['📝 Registro diario', '💊 Estupefacientes', '🚑 Carros de paro', '📊 Panel', '📈 Estadísticas', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
+const TABS = ['📝 Registro diario', '💊 Estupefacientes', '🚑 Carros de paro', '📦 Bodegas', '📊 Panel', '📈 Estadísticas', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
 function renderTabs(){
   const nav = document.getElementById('tabs'); nav.innerHTML = '';
   TABS.forEach((t,i)=>{
@@ -880,7 +887,7 @@ function render(){
   if(!cargado) return;
   renderTabs();
   const c = document.getElementById('contenido'); c.innerHTML = '';
-  [renderRegistro, renderEstup, renderCarros, renderPanel, renderStats, renderExcel, renderMaestra, renderRespaldo][ctx.tabActiva](c);
+  [renderRegistro, renderEstup, renderCarros, renderBodegas, renderPanel, renderStats, renderExcel, renderMaestra, renderRespaldo][ctx.tabActiva](c);
 }
 
 // helpers de dom
@@ -1062,6 +1069,101 @@ function setRevItem(hoja, fecha, nombre, k, v){
   if(v==='') delete o[k]; else o[k]=v;
   if(Object.keys(o).length) rev.items[nombre]=o; else delete rev.items[nombre];
   syncCarro(hoja, fecha);
+}
+
+// ================= TAB: bodegas =================
+function exportarBodega(nombre, soloFaltantes){
+  if(typeof XLSX === 'undefined' || !XLSX){ toast('⚠ Necesitas internet para generar el Excel. Recarga (F5).'); return; }
+  const items = BODEGAS()[nombre] || [];
+  const filas = [['Cod. Art.','Descripción','Cantidad','Ideal','Faltante','Estado']];
+  items.forEach(it=>{
+    const dif = (parseFloat(it.ideal)||0) - (parseFloat(it.cant)||0);
+    if(soloFaltantes && dif <= 0) return;
+    filas.push([it.codigo||'', it.desc||'', parseFloat(it.cant)||0, parseFloat(it.ideal)||0, dif>0?dif:0, it.estado||'ACTIVO']);
+  });
+  if(soloFaltantes && filas.length===1){ toast('✔ No hay faltantes en esta bodega'); return; }
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  ws['!cols'] = [{wch:10},{wch:55},{wch:9},{wch:8},{wch:9},{wch:9}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, soloFaltantes ? 'Pedido reposicion' : 'Inventario');
+  XLSX.writeFile(wb, (soloFaltantes ? 'PEDIDO_REPOSICION_' : 'INVENTARIO_') + nombre.replace(/ /g,'_') + '.xlsx');
+  toast('✅ Excel generado');
+}
+function renderBodegas(c){
+  const nombres = Object.keys(BODEGAS()).sort();
+  const card = el('div','card');
+  card.style.cssText = 'background:#fdf6e3; border-color:#e3d3a3;';
+  const fc = el('div','fila-ctrl');
+  const sel = el('select');
+  nombres.forEach(n=>{ const o=el('option','',n); o.value=n; sel.appendChild(o); });
+  if(ctx.bodSel===undefined || nombres.indexOf(ctx.bodSel)<0) ctx.bodSel = nombres[0] || '';
+  sel.value = ctx.bodSel;
+  sel.onchange = e=>{ ctx.bodSel = e.target.value; ctx.bodFiltro=''; render(); };
+  const inB = el('input'); inB.type='text'; inB.placeholder='Buscar ítem o código…'; inB.style.minWidth='220px';
+  inB.value = ctx.bodFiltro || '';
+  inB.oninput = e=>{ ctx.bodFiltro = e.target.value; pintarFilas(); };
+  const bG = el('button','btn btn-gen','💾 Guardar');
+  bG.onclick = guardarAhora;
+  fc.append(ctrl('Bodega', sel), ctrl('Buscar', inB), bG);
+  card.appendChild(fc);
+  const fx = el('div','fila-ctrl'); fx.style.marginTop='8px';
+  const b1 = el('button','btn btn-sec','⬇ Excel inventario');
+  b1.onclick = ()=>exportarBodega(ctx.bodSel, false);
+  const b2 = el('button','btn btn-sec','⬇ Excel pedido de reposición (faltantes)');
+  b2.onclick = ()=>exportarBodega(ctx.bodSel, true);
+  fx.append(b1, b2);
+  card.appendChild(fx);
+  card.appendChild(el('p','hint','Registra la cantidad contada de cada ítem: si queda bajo el ideal se marca rojo. El pedido de reposición genera un Excel solo con los faltantes y cuánto pedir a farmacia. Los cambios se comparten con todo el equipo.'));
+  c.appendChild(card);
+
+  const items = BODEGAS()[ctx.bodSel] || [];
+  const falt = items.filter(it=>(parseFloat(it.cant)||0) < (parseFloat(it.ideal)||0)).length;
+  c.appendChild(kpiRow([[items.length,'Ítems en la bodega',false],[falt,'Bajo el ideal (faltantes)',falt>0],[items.length-falt,'Completos',false]]));
+
+  const card2 = el('div','card');
+  const tabla = el('table');
+  tabla.innerHTML = '<thead><tr><th>Código</th><th>Descripción</th><th style="text-align:center">Ideal</th><th style="text-align:center">Cantidad</th><th></th></tr></thead>';
+  const tb = el('tbody');
+  function filaBod(it){
+    const tr = el('tr');
+    tr.appendChild(el('td','',it.codigo||''));
+    const tdD = el('td'); const iD = el('input'); iD.className='nom'; iD.value=it.desc||'';
+    iD.oninput = e=>{ it.desc=e.target.value; syncBodega(ctx.bodSel); };
+    tdD.appendChild(iD); tr.appendChild(tdD);
+    const tdI = el('td','entrada'); const iI = el('input'); iI.type='number'; iI.min='0'; iI.value = it.ideal;
+    iI.oninput = e=>{ const n=parseFloat(e.target.value); it.ideal = isNaN(n)?0:n; syncBodega(ctx.bodSel); marca(); };
+    tdI.appendChild(iI); tr.appendChild(tdI);
+    const tdC = el('td','entrada'); const iC = el('input'); iC.type='number'; iC.min='0'; iC.value = it.cant;
+    function marca(){ const v=parseFloat(iC.value)||0, id2=parseFloat(iI.value)||0; iC.classList.toggle('bajo', id2>0 && v<id2); }
+    marca();
+    iC.oninput = e=>{ const n=parseFloat(e.target.value); it.cant = isNaN(n)?0:n; syncBodega(ctx.bodSel); marca(); };
+    tdC.appendChild(iC); tr.appendChild(tdC);
+    const tdX = el('td','del'); const bd = el('button','btn-mini','✕');
+    bd.onclick = ()=>{ const lista=BODEGAS()[ctx.bodSel]; const ix=lista.indexOf(it); if(ix>=0){ lista.splice(ix,1); syncBodega(ctx.bodSel); render(); } };
+    tdX.appendChild(bd); tr.appendChild(tdX);
+    tr.dataset.busq = ((it.codigo||'') + ' ' + (it.desc||'')).toLowerCase();
+    return tr;
+  }
+  items.forEach(it=>tb.appendChild(filaBod(it)));
+  tabla.appendChild(tb); card2.appendChild(tabla);
+  function pintarFilas(){
+    const f = (ctx.bodFiltro||'').toLowerCase().trim();
+    Array.from(tb.children).forEach(tr=>{ tr.style.display = (!f || tr.dataset.busq.indexOf(f)>=0) ? '' : 'none'; });
+  }
+  pintarFilas();
+  const fr2 = el('div','fila-ctrl'); fr2.style.marginTop='10px';
+  const iCod = el('input'); iCod.type='text'; iCod.placeholder='Código'; iCod.style.width='110px';
+  const iDes = el('input'); iDes.type='text'; iDes.placeholder='Descripción del nuevo ítem'; iDes.style.minWidth='260px';
+  const iIde = el('input'); iIde.type='number'; iIde.placeholder='Ideal'; iIde.style.width='90px';
+  const bAdd = el('button','btn btn-sec','+ Agregar ítem');
+  bAdd.onclick = ()=>{
+    const d = iDes.value.trim(); if(!d) return;
+    BODEGAS()[ctx.bodSel].push({codigo: iCod.value.trim(), desc: d, cant: 0, ideal: parseFloat(iIde.value)||0, estado:'ACTIVO'});
+    syncBodega(ctx.bodSel); render();
+  };
+  fr2.append(iCod, iDes, iIde, bAdd);
+  card2.appendChild(fr2);
+  c.appendChild(card2);
 }
 
 // ================= TAB 4: panel =================
