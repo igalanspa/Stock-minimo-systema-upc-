@@ -1494,7 +1494,29 @@ function renderExcel(c){
 }
 
 // ================= TAB 6: lista maestra =================
+function normRut(s){ return (s||'').toUpperCase().replace(/[^0-9K]/g,''); }
+function renderLoginMaestra(c){
+  const card = el('div','card');
+  card.style.cssText = 'max-width:420px; margin:40px auto;';
+  card.appendChild(el('h3','sec','🔒 Lista maestra — acceso restringido'));
+  card.appendChild(el('p','hint','Esta sección modifica la configuración de todo el equipo (medicamentos, stocks mínimos, responsables). Ingresa tus credenciales para continuar.'));
+  const iU = el('input'); iU.type='text'; iU.placeholder='Usuario (RUT)'; iU.style.cssText='width:100%; margin-top:12px; box-sizing:border-box;';
+  const iC = el('input'); iC.type='password'; iC.placeholder='Clave'; iC.style.cssText='width:100%; margin-top:8px; box-sizing:border-box;';
+  const msg = el('p','hint',''); msg.style.color = 'var(--rojo)';
+  const b = el('button','btn btn-gen','🔓 Ingresar'); b.style.cssText='margin-top:10px; width:100%;';
+  function intentar(){
+    if(normRut(iU.value) === normRut(atob('MTUuMjgyNzc4LTQ=')) && iC.value === atob('dXBjZXUyMDI2')){
+      ctx.maestraOk = true; toast('✅ Acceso concedido'); render();
+    } else { msg.textContent = '⚠ Usuario o clave incorrectos.'; iC.value = ''; }
+  }
+  b.onclick = intentar;
+  iC.addEventListener('keydown', e=>{ if(e.key==='Enter') intentar(); });
+  iU.addEventListener('keydown', e=>{ if(e.key==='Enter') iC.focus(); });
+  card.append(iU, iC, b, msg);
+  c.appendChild(card);
+}
 function renderMaestra(c){
+  if(!ctx.maestraOk){ renderLoginMaestra(c); return; }
   const card = el('div','card');
   const tabs = el('div','fila-ctrl');
   const nombres = ['Stock Mínimo UPC','Estupefacientes', ...DATA().carros.map(cr=>cr.hoja.replace('Carro de paro','Carro')), '👤 Responsables'];
