@@ -963,7 +963,7 @@ function renderEstup(c){
 
   const card2 = el('div','card');
   const tabla = el('table');
-  tabla.innerHTML = '<thead><tr><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Recibo</th><th style="text-align:center">Entrega</th></tr></thead>';
+  tabla.innerHTML = '<thead><tr><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Recibo</th><th style="text-align:center">Entrega</th><th style="text-align:center">Vencimiento</th></tr></thead>';
   const tb = el('tbody');
   DATA().estupefacientes.forEach(it=>{
     const tr = el('tr');
@@ -986,6 +986,13 @@ function renderEstup(c){
       };
       td.appendChild(inp); tr.appendChild(td);
     });
+    const tdV = el('td','entrada');
+    const inV = el('input'); inV.type='date';
+    if(!DATA().vencEstup) DATA().vencEstup = {};
+    inV.value = DATA().vencEstup[it.nombre] || '';
+    inV.className = venceClase(inV.value);
+    inV.onchange = e=>{ DATA().vencEstup[it.nombre] = e.target.value; syncConfig(); inV.className = venceClase(e.target.value); };
+    tdV.appendChild(inV); tr.appendChild(tdV);
     tb.appendChild(tr);
   });
   tabla.appendChild(tb); card2.appendChild(tabla);
