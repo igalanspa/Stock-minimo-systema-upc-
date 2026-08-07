@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema UPC — cargando…</title>
+</head>
+<body style="font-family:sans-serif;padding:30px;text-align:center">
+<h3>⏳ Cargando Sistema UPC (versión clásica)…</h3>
+<p id="err" style="color:#c0392b"></p>
+<script>
+(function(){
+  var URL0 = 'https://jsxhknlwuxwvdoamtqkh.supabase.co/rest/v1/upc_paginas?id=eq.ipad&select=html';
+  var KEY = 'sb_publishable_IYOEpsuj8Ev4pEOroRT6eg_6gRUg69L';
+  var x = new XMLHttpRequest();
+  x.open('GET', URL0, true);
+  x.setRequestHeader('apikey', KEY);
+  x.setRequestHeader('Authorization', 'Bearer ' + KEY);
+  x.onreadystatechange = function(){
+    if (x.readyState === 4) {
+      if (x.status === 200) {
+        try {
+          var filas = JSON.parse(x.responseText);
+          var html = filas[0] && filas[0].html;
+          if (!html) throw new Error('sin contenido');
+          document.open();
+          document.write(html);
+          document.close();
+        } catch (e) { document.getElementById('err').textContent = 'Error: ' + e; }
+      } else {
+        document.getElementById('err').textContent = 'No se pudo conectar (HTTP ' + x.status + '). Revisa el internet e intenta de nuevo.';
+      }
+    }
+  };
+  x.send();
+})();
+</script>
+</body>
+</html>
