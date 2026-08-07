@@ -716,6 +716,28 @@ let ultimaEdicion = 0;
 const pendientes = new Map();   // clave -> {url, body}
 let sincronizando = false;
 
+// ===== respaldo local (funciona sin internet) =====
+const LS_ESTADO = 'upc_estado_v1';
+const LS_PEND = 'upc_pend_v1';
+function respaldoLocal(){
+  try{ localStorage.setItem(LS_ESTADO, JSON.stringify({ t: Date.now(), config: STATE.config, reg: STATE.reg, bodegas: STATE.bodegas||{}, bhist: STATE.bhist||{} })); }catch(e){}
+}
+function guardarPendLocal(){
+  try{ localStorage.setItem(LS_PEND, JSON.stringify(Array.from(pendientes.entries()))); }catch(e){}
+}
+function cargarLocal(){
+  try{
+    const p = JSON.parse(localStorage.getItem(LS_PEND)||'[]');
+    p.forEach(par=>pendientes.set(par[0], par[1]));
+    const s = JSON.parse(localStorage.getItem(LS_ESTADO)||'null');
+    if(s && s.config){
+      STATE = { config: s.config, reg: s.reg||{stock:{},estup:{},carros:{}}, bodegas: s.bodegas||{}, bhist: s.bhist||{} };
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
 function estado(txt){ const d=document.getElementById('saveDot'); if(d) d.textContent = txt; }
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
 
@@ -727,6 +749,7 @@ async function sbGet(path){
 function programarUpsert(clave, tabla, body){
   pendientes.set(clave, { tabla, body });
   ultimaEdicion = Date.now();
+  respaldoLocal(); guardarPendLocal();
   estado('⟳ guardando…');
   clearTimeout(programarUpsert._t);
   programarUpsert._t = setTimeout(procesarPendientes, 500);
@@ -747,8 +770,9 @@ async function procesarPendientes(){
     }
     estado('● sincronizado');
   }catch(e){
-    estado('⚠ sin conexión — reintentando…');
+    estado('⚠ sin conexión — guardado en este equipo');
   }finally{
+    guardarPendLocal();
     sincronizando = false;
     if(pendientes.size) setTimeout(procesarPendientes, 5000);
   }
@@ -757,7 +781,7 @@ async function guardarAhora(){
   clearTimeout(programarUpsert._t);
   await procesarPendientes();
   if(!pendientes.size){ estado('● sincronizado'); toast('✅ Información guardada en la base central'); }
-  else { toast('⚠ Sin conexión: los datos quedaron en cola y se guardarán al reconectar'); }
+  else { toast('⚠ Sin internet: la información quedó guardada en este equipo y se enviará sola al reconectar'); }
 }
 const nowISO = () => new Date().toISOString();
 function syncStock(fecha, turno){
@@ -827,6 +851,7 @@ async function cargarTodo(silencioso){
       }
       estado('● sincronizado');
     }
+    respaldoLocal();
   }catch(e){
     if(!cargado){
       const c = document.getElementById('contenido');
@@ -1933,13 +1958,25 @@ function renderRespaldo(c){
 
   const card2 = el('div','card');
   card2.appendChild(el('h3','sec','ℹ Cómo compartir el sistema'));
-  card2.appendChild(el('p','hint','Comparte este mismo archivo (o su enlace si está publicado como página web) con el equipo. Cada persona lo abre en su navegador y trabaja sobre los mismos datos. Requiere internet.'));
+  card2.appendChild(el('p','hint','Comparte este mismo archivo (o su enlace si está publicado como página web) con el equipo. Cada persona lo abre en su navegador y trabaja sobre los mismos datos. Si se corta internet, el sistema sigue funcionando: la información queda guardada en el equipo y se sincroniza sola al reconectar.'));
   c.appendChild(card2);
 }
 
 // ================= init =================
 document.getElementById('unidad').addEventListener('input', e=>{ DATA().unidad = e.target.value; syncConfig(); });
+if(cargarLocal()){
+  cargado = true;
+  document.getElementById('unidad').value = DATA().unidad;
+  estado('● datos de este equipo');
+  render();
+  if(pendientes.size) setTimeout(procesarPendientes, 800);
+}
 cargarTodo();
+window.addEventListener('online', ()=>{ estado('⟳ reconectando…'); procesarPendientes(); cargarTodo(true); });
+window.addEventListener('offline', ()=>{ estado('⚠ sin conexión — guardado en este equipo'); });
+if('serviceWorker' in navigator && location.protocol === 'https:'){
+  navigator.serviceWorker.register('./sw.js').catch(function(e){});
+}
 </script>
 </body>
 </html>
