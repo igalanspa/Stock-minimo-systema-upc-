@@ -1352,13 +1352,15 @@ function renderCarros(c){
     const aCod = el('input'); aCod.type='text'; aCod.placeholder='Código'; aCod.style.cssText = 'width:110px; flex:0 0 auto; text-align:left;';
     const aNom = el('input'); aNom.type='text'; aNom.placeholder='Nuevo insumo para ' + sec.categoria; aNom.style.cssText = 'flex:1 1 auto; width:auto; min-width:120px; text-align:left;';
     const aStk = el('input'); aStk.type='number'; aStk.placeholder='Stock'; aStk.style.cssText = 'width:85px; flex:0 0 auto;';
+    const aVen = el('input'); aVen.type='date'; aVen.title='Vencimiento'; aVen.style.cssText = 'width:150px; flex:0 0 auto;';
     const aBtn = el('button','btn btn-sec','+ Agregar insumo'); aBtn.style.cssText = 'flex:0 0 auto; white-space:nowrap;';
     aBtn.onclick = ()=>{
       const nm = aNom.value.trim(); if(!nm) return;
       sec.items.push({nombre: nm, stock: parseFloat(aStk.value)||0, codigo: aCod.value.trim()});
+      if(aVen.value) setRevItem(carro.hoja, ctx.fechaC, nm, 'v', aVen.value);
       syncConfig(); render();
     };
-    fA.append(aCod, aNom, aStk, aBtn);
+    fA.append(aCod, aNom, aStk, aVen, aBtn);
     tda.appendChild(fA); tra.appendChild(tda); tb.appendChild(tra);
   });
   tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
@@ -1471,17 +1473,19 @@ function renderBodegas(c){
     Array.from(tb.children).forEach(tr=>{ tr.style.display = (!f || tr.dataset.busq.indexOf(f)>=0) ? '' : 'none'; });
   }
   pintarFilas();
-  const fr2 = el('div','fila-ctrl'); fr2.style.marginTop='10px';
-  const iCod = el('input'); iCod.type='text'; iCod.placeholder='Código'; iCod.style.width='110px';
-  const iDes = el('input'); iDes.type='text'; iDes.placeholder='Descripción del nuevo ítem'; iDes.style.minWidth='260px';
-  const iIde = el('input'); iIde.type='number'; iIde.placeholder='Ideal'; iIde.style.width='90px';
-  const bAdd = el('button','btn btn-sec','+ Agregar ítem');
+  const fr2 = el('div'); fr2.style.cssText = 'display:flex; gap:8px; align-items:center; flex-wrap:nowrap; margin-top:10px;';
+  const iCod = el('input'); iCod.type='text'; iCod.placeholder='Código'; iCod.style.cssText='width:100px; flex:0 0 auto;';
+  const iDes = el('input'); iDes.type='text'; iDes.placeholder='Descripción del nuevo ítem'; iDes.style.cssText='flex:1 1 auto; width:auto; min-width:120px;';
+  const iIde = el('input'); iIde.type='number'; iIde.placeholder='Ideal'; iIde.style.cssText='width:80px; flex:0 0 auto;';
+  const iCan = el('input'); iCan.type='number'; iCan.placeholder='Cantidad'; iCan.style.cssText='width:90px; flex:0 0 auto;';
+  const iVen = el('input'); iVen.type='date'; iVen.title='Vencimiento'; iVen.style.cssText='width:150px; flex:0 0 auto;';
+  const bAdd = el('button','btn btn-sec','+ Agregar ítem'); bAdd.style.cssText='flex:0 0 auto; white-space:nowrap;';
   bAdd.onclick = ()=>{
     const d = iDes.value.trim(); if(!d) return;
-    BODEGAS()[ctx.bodSel].push({codigo: iCod.value.trim(), desc: d, cant: 0, ideal: parseFloat(iIde.value)||0, estado:'ACTIVO'});
+    BODEGAS()[ctx.bodSel].push({codigo: iCod.value.trim(), desc: d, cant: parseFloat(iCan.value)||0, ideal: parseFloat(iIde.value)||0, venc: iVen.value||'', estado:'ACTIVO'});
     syncBodega(ctx.bodSel); render();
   };
-  fr2.append(iCod, iDes, iIde, bAdd);
+  fr2.append(iCod, iDes, iIde, iCan, iVen, bAdd);
   card2.appendChild(fr2);
   c.appendChild(card2);
   c.appendChild(cardHistorial('Historial — ' + ctx.bodSel, histBodega(ctx.bodSel), null));
