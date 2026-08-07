@@ -1352,15 +1352,17 @@ function renderCarros(c){
     const aCod = el('input'); aCod.type='text'; aCod.placeholder='Código'; aCod.style.cssText = 'width:110px; flex:0 0 auto; text-align:left;';
     const aNom = el('input'); aNom.type='text'; aNom.placeholder='Nuevo insumo para ' + sec.categoria; aNom.style.cssText = 'flex:1 1 auto; width:auto; min-width:120px; text-align:left;';
     const aStk = el('input'); aStk.type='number'; aStk.placeholder='Stock'; aStk.style.cssText = 'width:85px; flex:0 0 auto;';
+    const aCan = el('input'); aCan.type='number'; aCan.placeholder='Cantidad'; aCan.style.cssText = 'width:90px; flex:0 0 auto;';
     const aVen = el('input'); aVen.type='date'; aVen.title='Vencimiento'; aVen.style.cssText = 'width:150px; flex:0 0 auto;';
     const aBtn = el('button','btn btn-sec','+ Agregar insumo'); aBtn.style.cssText = 'flex:0 0 auto; white-space:nowrap;';
     aBtn.onclick = ()=>{
       const nm = aNom.value.trim(); if(!nm) return;
       sec.items.push({nombre: nm, stock: parseFloat(aStk.value)||0, codigo: aCod.value.trim()});
+      if(aCan.value!=='') setRevItem(carro.hoja, ctx.fechaC, nm, 'c', aCan.value);
       if(aVen.value) setRevItem(carro.hoja, ctx.fechaC, nm, 'v', aVen.value);
       syncConfig(); render();
     };
-    fA.append(aCod, aNom, aStk, aVen, aBtn);
+    fA.append(aCod, aNom, aStk, aCan, aVen, aBtn);
     tda.appendChild(fA); tra.appendChild(tda); tb.appendChild(tra);
   });
   tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
