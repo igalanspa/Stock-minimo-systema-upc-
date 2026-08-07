@@ -81,6 +81,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script>/* Núcleo v2 del Sistema UPC: genera el Excel mensual PRELLENADO desde el registro digital,
    con hoja RESUMEN. Usable en Node (test) y navegador. */
 (function (root, factory) {
@@ -1025,6 +1027,89 @@ function histExcel(){
                                  .sort((a,b)=> a.fecha<b.fecha ? 1 : -1);
 }
 
+// ---- PDF ejecutivo por sección ----
+function crearPDF(titulo, subtitulos, columnas, filas, extraLineas){
+  if(!window.jspdf || !window.jspdf.jsPDF){ toast('⚠ Necesitas internet para generar el PDF. Recarga la página (F5).'); return null; }
+  const doc = new window.jspdf.jsPDF();
+  doc.setFontSize(15); doc.setTextColor(31,78,121); doc.setFont(undefined,'bold');
+  doc.text(titulo, 14, 16);
+  doc.setFontSize(10); doc.setTextColor(70,70,70); doc.setFont(undefined,'normal');
+  let y = 24;
+  subtitulos.forEach(s=>{ doc.text(s, 14, y); y += 5.5; });
+  doc.autoTable({
+    startY: y + 2,
+    head: [columnas],
+    body: filas,
+    styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8 },
+    headStyles: { fillColor:[31,78,121], textColor:255, fontStyle:'bold' },
+    alternateRowStyles: { fillColor:[240,244,249] },
+    margin: { left:14, right:14 }
+  });
+  let y2 = doc.lastAutoTable.finalY + 12;
+  if(y2 > 270){ doc.addPage(); y2 = 24; }
+  doc.setFontSize(10); doc.setTextColor(30,30,30);
+  (extraLineas||[]).forEach(l=>{ doc.text(l, 14, y2); y2 += 8; });
+  doc.setFontSize(8); doc.setTextColor(130,130,130);
+  doc.text('Documento generado por el Sistema UPC — ' + fmtFechaCorta(hoyISO()), 14, 288);
+  return doc;
+}
+function pdfRegistro(){
+  const rd = ((REG().stock[ctx.fecha]||{})[ctx.turno]) || {};
+  const filas = DATA().stock_minimo_upc.map(it=>[
+    it.codigo||'', it.nombre, String(it.stock),
+    rd[it.nombre]!==undefined ? String(rd[it.nombre]) : '',
+    (DATA().vencStock && DATA().vencStock[it.nombre]) ? fmtFechaCorta(DATA().vencStock[it.nombre]) : ''
+  ]);
+  const doc = crearPDF('CONTROL STOCK MÍNIMO UPC — ' + DATA().unidad,
+    ['Fecha: ' + fmtFechaCorta(ctx.fecha) + '        Turno: ' + ctx.turno],
+    ['Código','Medicamento','Stock mín','Conteo','Vencimiento'], filas,
+    ['Enfermero/a responsable: ' + (rd.__resp || '______________________________'), 'Firma: ______________________________']);
+  if(doc){ doc.save('REGISTRO_DIARIO_' + ctx.fecha + '_' + ctx.turno + '.pdf'); logExcel('PDF Registro diario', fmtFechaCorta(ctx.fecha) + ' turno ' + ctx.turno); }
+}
+function pdfEstup(){
+  const rd = ((REG().estup[ctx.fechaE]||{})[ctx.turnoE]) || {};
+  const filas = DATA().estupefacientes.map(it=>{
+    const o = rd[it.nombre] || {};
+    return [it.codigo||'', it.nombre, String(it.stock),
+      o.r!==undefined ? String(o.r) : '', o.e!==undefined ? String(o.e) : '',
+      (DATA().vencEstup && DATA().vencEstup[it.nombre]) ? fmtFechaCorta(DATA().vencEstup[it.nombre]) : ''];
+  });
+  const doc = crearPDF('CONTROL DE ESTUPEFACIENTES — ' + DATA().unidad,
+    ['Fecha: ' + fmtFechaCorta(ctx.fechaE) + '        Turno: ' + ctx.turnoE,
+     'Paciente(s): ' + (rd.__pacientes || '—'),
+     'Stock de pacientes: ' + (rd.__pac !== undefined && rd.__pac !== '' ? rd.__pac : '—')],
+    ['Código','Medicamento','Stock mín','Recibo','Entrega','Vencimiento'], filas,
+    ['Enfermero/a responsable: ' + (rd.__resp || '______________________________'), 'Firma: ______________________________']);
+  if(doc){ doc.save('ESTUPEFACIENTES_' + ctx.fechaE + '_' + ctx.turnoE + '.pdf'); logExcel('PDF Estupefacientes', fmtFechaCorta(ctx.fechaE) + ' turno ' + ctx.turnoE); }
+}
+function pdfCarro(){
+  const carro = DATA().carros[ctx.carroIdx];
+  const rev = getRev(carro.hoja, ctx.fechaC);
+  const filas = [];
+  carro.secciones.forEach(sec=>{
+    filas.push([{content: sec.categoria, colSpan: 5, styles:{ fillColor:[217,217,217], fontStyle:'bold', textColor:[31,78,121] }}]);
+    sec.items.forEach(it=>{
+      const dat = (rev.items && rev.items[it.nombre]) || {};
+      filas.push([it.codigo||'', it.nombre, String(it.stock), dat.c!==undefined ? String(dat.c) : '', dat.v ? fmtFechaCorta(dat.v) : '']);
+    });
+  });
+  const doc = crearPDF(carro.titulo + ' — ' + DATA().unidad,
+    ['Fecha de revisión: ' + fmtFechaCorta(ctx.fechaC)],
+    ['Código','Ítem','Stock','Cantidad','Vencimiento'], filas,
+    ['Enfermero/a responsable: ' + (rev.resp || '______________________________'), 'Firma: ______________________________']);
+  if(doc){ doc.save('CARRO_PARO_' + ctx.fechaC + '.pdf'); logExcel('PDF Carro de paro', carro.hoja + ' ' + fmtFechaCorta(ctx.fechaC)); }
+}
+function pdfBodega(){
+  const items = BODEGAS()[ctx.bodSel] || [];
+  const falt = items.filter(it=>(parseFloat(it.cant)||0) < (parseFloat(it.ideal)||0)).length;
+  const filas = items.map(it=>[it.codigo||'', it.desc||'', String(it.ideal), String(it.cant), it.venc ? fmtFechaCorta(it.venc) : '']);
+  const doc = crearPDF(ctx.bodSel + ' — ' + DATA().unidad,
+    ['Fecha: ' + fmtFechaCorta(hoyISO()) + '        Ítems: ' + items.length + '        Faltantes: ' + falt],
+    ['Código','Descripción','Ideal','Cantidad','Vencimiento'], filas,
+    ['Enfermero/a responsable: ______________________________', 'Firma: ______________________________']);
+  if(doc){ doc.save('BODEGA_' + hoyISO() + '.pdf'); logExcel('PDF Bodega', ctx.bodSel); }
+}
+
 // ---- códigos: autocompletar desde los catálogos de bodega ----
 function normTxt(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 function buscarCodigo(nombre){
@@ -1069,7 +1154,9 @@ function renderRegistro(c){
   bG.onclick = guardarAhora;
   const bAuto = el('button','btn btn-sec','⚙ Completar códigos');
   bAuto.onclick = ()=>autocompletarCodigos(DATA().stock_minimo_upc);
-  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR), bG, bAuto);
+  const bPdf = el('button','btn btn-sec','📄 PDF');
+  bPdf.onclick = pdfRegistro;
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR), bG, bPdf, bAuto);
   card.appendChild(fc);
   card.appendChild(el('p','hint','Anota solo el conteo. Si queda bajo el stock mínimo, se marca rojo al instante. Al terminar, presiona Guardar para confirmar el registro en la base central.'));
   c.appendChild(card);
@@ -1131,7 +1218,9 @@ function renderEstup(c){
   bG.onclick = guardarAhora;
   const bAuto = el('button','btn btn-sec','⚙ Completar códigos');
   bAuto.onclick = ()=>autocompletarCodigos(DATA().estupefacientes);
-  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), bG, bAuto);
+  const bPdf = el('button','btn btn-sec','📄 PDF');
+  bPdf.onclick = pdfEstup;
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), bG, bPdf, bAuto);
   card.appendChild(fc);
   card.appendChild(el('p','hint','Recibo = lo que cuentas al RECIBIR el turno. Entrega = lo que cuentas al ENTREGAR. Bajo mínimo se marca rojo.'));
   c.appendChild(card);
@@ -1221,7 +1310,9 @@ function renderCarros(c){
   bG.onclick = guardarAhora;
   const bAuto = el('button','btn btn-sec','⚙ Completar códigos');
   bAuto.onclick = ()=>{ const its = []; carro.secciones.forEach(s=>s.items.forEach(i2=>its.push(i2))); autocompletarCodigos(its); };
-  fc.append(ctrl('Carro', sel), ctrl('Fecha de revisión', inF), ctrl('Responsable', inR), bG, bAuto);
+  const bPdf = el('button','btn btn-sec','📄 PDF');
+  bPdf.onclick = pdfCarro;
+  fc.append(ctrl('Carro', sel), ctrl('Fecha de revisión', inF), ctrl('Responsable', inR), bG, bPdf, bAuto);
   card.appendChild(fc);
   card.appendChild(el('p','hint','Anota cantidad y vencimiento más próximo de cada ítem. Rojo = bajo stock o vencido; ámbar = vence dentro de 30 días. Cada fecha distinta crea una nueva revisión (el Excel del mes muestra hasta 6).'));
   c.appendChild(card);
@@ -1334,7 +1425,9 @@ function renderBodegas(c){
   b1.onclick = ()=>exportarBodega(ctx.bodSel, false);
   const b2 = el('button','btn btn-sec','⬇ Excel pedido de reposición (faltantes)');
   b2.onclick = ()=>exportarBodega(ctx.bodSel, true);
-  fx.append(b1, b2);
+  const b3 = el('button','btn btn-sec','📄 PDF');
+  b3.onclick = pdfBodega;
+  fx.append(b1, b2, b3);
   card.appendChild(fx);
   card.appendChild(el('p','hint','Registra la cantidad contada de cada ítem: si queda bajo el ideal se marca rojo. El pedido de reposición genera un Excel solo con los faltantes y cuánto pedir a farmacia. Los cambios se comparten con todo el equipo.'));
   c.appendChild(card);
