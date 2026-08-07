@@ -1,0 +1,10 @@
+CACHE MANIFEST
+# Sistema UPC version clasica v2
+CACHE:
+ipad.html
+https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js
+https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js
+https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js
+https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js
+NETWORK:
+*
