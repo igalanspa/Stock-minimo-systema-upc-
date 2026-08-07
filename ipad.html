@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" manifest="upc.appcache">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,10 +12,26 @@
 (function(){
   var URL0 = 'https://jsxhknlwuxwvdoamtqkh.supabase.co/rest/v1/upc_paginas?id=eq.ipad&select=html';
   var KEY = 'sb_publishable_IYOEpsuj8Ev4pEOroRT6eg_6gRUg69L';
+  var LSK = 'upc_ipad_html_v1';
+  var listo = false;
+  function render(html){
+    listo = true;
+    document.open();
+    document.write(html);
+    document.close();
+  }
+  function respaldo(msg){
+    if (listo) return;
+    var g = null;
+    try { g = localStorage.getItem(LSK); } catch(e) {}
+    if (g) { render(g); }
+    else { document.getElementById('err').textContent = msg; }
+  }
   var x = new XMLHttpRequest();
   x.open('GET', URL0, true);
   x.setRequestHeader('apikey', KEY);
   x.setRequestHeader('Authorization', 'Bearer ' + KEY);
+  try { x.timeout = 15000; x.ontimeout = function(){ respaldo('Sin respuesta de la base. Intenta de nuevo.'); }; } catch(e) {}
   x.onreadystatechange = function(){
     if (x.readyState === 4) {
       if (x.status === 200) {
@@ -23,15 +39,15 @@
           var filas = JSON.parse(x.responseText);
           var html = filas[0] && filas[0].html;
           if (!html) throw new Error('sin contenido');
-          document.open();
-          document.write(html);
-          document.close();
-        } catch (e) { document.getElementById('err').textContent = 'Error: ' + e; }
+          try { localStorage.setItem(LSK, html); } catch(e) {}
+          render(html);
+        } catch (e) { respaldo('Error: ' + e); }
       } else {
-        document.getElementById('err').textContent = 'No se pudo conectar (HTTP ' + x.status + '). Revisa el internet e intenta de nuevo.';
+        respaldo('Sin internet: no hay copia guardada aún en este equipo. Abre una vez con internet.');
       }
     }
   };
+  x.onerror = function(){ respaldo('Sin internet: no hay copia guardada aún en este equipo. Abre una vez con internet.'); };
   x.send();
 })();
 </script>
