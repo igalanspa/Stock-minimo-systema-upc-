@@ -1462,6 +1462,7 @@ function renderBodegas(c){
   c.appendChild(card);
 
   const items = BODEGAS()[ctx.bodSel] || [];
+  items.sort((a,b)=> normTxt(a.desc||'').localeCompare(normTxt(b.desc||''), 'es'));
   const falt = items.filter(it=>(parseFloat(it.cant)||0) < (parseFloat(it.ideal)||0)).length;
   c.appendChild(kpiRow([[items.length,'Ítems en la bodega',false],[falt,'Bajo el ideal (faltantes)',falt>0],[items.length-falt,'Completos',false]]));
 
