@@ -1025,6 +1025,32 @@ function histExcel(){
                                  .sort((a,b)=> a.fecha<b.fecha ? 1 : -1);
 }
 
+// ---- códigos: autocompletar desde los catálogos de bodega ----
+function normTxt(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function buscarCodigo(nombre){
+  const n = normTxt(nombre);
+  const toks = n.split(/[^a-z0-9,\.]+/).filter(t=>t.length>=4);
+  if(!toks.length) return null;
+  const raiz = toks[0].slice(0,5);
+  const nums = n.match(/\d+[\.,]?\d*/g) || [];
+  const cands = [];
+  Object.keys(BODEGAS()).forEach(b=>{
+    (BODEGAS()[b]||[]).forEach(it=>{
+      const d = normTxt(it.desc);
+      if(d.indexOf(raiz) < 0) return;
+      if(nums.length && !nums.some(x=> d.indexOf(x)>=0 || d.indexOf(x.replace(',','.'))>=0 || d.indexOf(x.replace('.',','))>=0)) return;
+      if(it.codigo && cands.indexOf(it.codigo) < 0) cands.push(it.codigo);
+    });
+  });
+  return cands.length === 1 ? cands[0] : null;
+}
+function autocompletarCodigos(items){
+  let n = 0;
+  items.forEach(it=>{ if(!it.codigo){ const c = buscarCodigo(it.nombre); if(c){ it.codigo = c; n++; } } });
+  if(n){ syncConfig(); render(); }
+  toast(n ? ('✅ ' + n + ' códigos completados desde las bodegas') : 'Sin coincidencias nuevas — puedes escribir los códigos a mano');
+}
+
 // ================= TAB 1: registro diario =================
 function renderRegistro(c){
   const card = el('div','card');
@@ -1041,7 +1067,9 @@ function renderRegistro(c){
   const inR = selResp(rd.__resp || '', v=>{ setReg('stock', ctx.fecha, ctx.turno, '__resp', v); });
   const bG = el('button','btn btn-gen','💾 Guardar');
   bG.onclick = guardarAhora;
-  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR), bG);
+  const bAuto = el('button','btn btn-sec','⚙ Completar códigos');
+  bAuto.onclick = ()=>autocompletarCodigos(DATA().stock_minimo_upc);
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR), bG, bAuto);
   card.appendChild(fc);
   card.appendChild(el('p','hint','Anota solo el conteo. Si queda bajo el stock mínimo, se marca rojo al instante. Al terminar, presiona Guardar para confirmar el registro en la base central.'));
   c.appendChild(card);
@@ -1052,9 +1080,11 @@ function renderRegistro(c){
   const tb = el('tbody');
   DATA().stock_minimo_upc.forEach(it=>{
     const tr = el('tr');
-    const tdc0 = el('td','', it.codigo || '');
-    tdc0.style.cssText = 'color:var(--gris); font-size:12.5px; white-space:nowrap;';
-    tr.appendChild(tdc0);
+    const tdc0 = el('td'); tdc0.style.width = '95px';
+    const ic0 = el('input'); ic0.className = 'nom'; ic0.placeholder = 'Código'; ic0.style.cssText = 'width:90px; color:var(--gris); font-size:12.5px;';
+    ic0.value = it.codigo || '';
+    ic0.oninput = e=>{ it.codigo = e.target.value; syncConfig(); };
+    tdc0.appendChild(ic0); tr.appendChild(tdc0);
     tr.appendChild(el('td','',it.nombre));
     tr.appendChild(el('td','min',String(it.stock)));
     const td = el('td','entrada');
@@ -1099,7 +1129,9 @@ function renderEstup(c){
   const rd = ((REG().estup[ctx.fechaE]||{})[ctx.turnoE]) || {};
   const bG = el('button','btn btn-gen','💾 Guardar');
   bG.onclick = guardarAhora;
-  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), bG);
+  const bAuto = el('button','btn btn-sec','⚙ Completar códigos');
+  bAuto.onclick = ()=>autocompletarCodigos(DATA().estupefacientes);
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), bG, bAuto);
   card.appendChild(fc);
   card.appendChild(el('p','hint','Recibo = lo que cuentas al RECIBIR el turno. Entrega = lo que cuentas al ENTREGAR. Bajo mínimo se marca rojo.'));
   c.appendChild(card);
@@ -1110,9 +1142,11 @@ function renderEstup(c){
   const tb = el('tbody');
   DATA().estupefacientes.forEach(it=>{
     const tr = el('tr');
-    const tdc0 = el('td','', it.codigo || '');
-    tdc0.style.cssText = 'color:var(--gris); font-size:12.5px; white-space:nowrap;';
-    tr.appendChild(tdc0);
+    const tdc0 = el('td'); tdc0.style.width = '95px';
+    const ic0 = el('input'); ic0.className = 'nom'; ic0.placeholder = 'Código'; ic0.style.cssText = 'width:90px; color:var(--gris); font-size:12.5px;';
+    ic0.value = it.codigo || '';
+    ic0.oninput = e=>{ it.codigo = e.target.value; syncConfig(); };
+    tdc0.appendChild(ic0); tr.appendChild(tdc0);
     tr.appendChild(el('td','',it.nombre));
     tr.appendChild(el('td','min',String(it.stock)));
     ['r','e'].forEach(k=>{
@@ -1185,7 +1219,9 @@ function renderCarros(c){
   const inR = selResp(rev.resp || '', v=>{ getRev(carro.hoja, ctx.fechaC).resp = v; syncCarro(carro.hoja, ctx.fechaC); });
   const bG = el('button','btn btn-gen','💾 Guardar');
   bG.onclick = guardarAhora;
-  fc.append(ctrl('Carro', sel), ctrl('Fecha de revisión', inF), ctrl('Responsable', inR), bG);
+  const bAuto = el('button','btn btn-sec','⚙ Completar códigos');
+  bAuto.onclick = ()=>{ const its = []; carro.secciones.forEach(s=>s.items.forEach(i2=>its.push(i2))); autocompletarCodigos(its); };
+  fc.append(ctrl('Carro', sel), ctrl('Fecha de revisión', inF), ctrl('Responsable', inR), bG, bAuto);
   card.appendChild(fc);
   card.appendChild(el('p','hint','Anota cantidad y vencimiento más próximo de cada ítem. Rojo = bajo stock o vencido; ámbar = vence dentro de 30 días. Cada fecha distinta crea una nueva revisión (el Excel del mes muestra hasta 6).'));
   c.appendChild(card);
@@ -1199,9 +1235,11 @@ function renderCarros(c){
     const tdc = el('td','',sec.categoria); tdc.colSpan=5; trc.appendChild(tdc); tb.appendChild(trc);
     sec.items.forEach(it=>{
       const tr = el('tr');
-      const tdc0 = el('td','', it.codigo || '');
-      tdc0.style.cssText = 'color:var(--gris); font-size:12.5px; white-space:nowrap;';
-      tr.appendChild(tdc0);
+      const tdc0 = el('td'); tdc0.style.width = '95px';
+      const ic0 = el('input'); ic0.className = 'nom'; ic0.placeholder = 'Código'; ic0.style.cssText = 'width:90px; color:var(--gris); font-size:12.5px;';
+      ic0.value = it.codigo || '';
+      ic0.oninput = e=>{ it.codigo = e.target.value; syncConfig(); };
+      tdc0.appendChild(ic0); tr.appendChild(tdc0);
       tr.appendChild(el('td','',it.nombre));
       tr.appendChild(el('td','min',String(it.stock)));
       const dat = rev.items[it.nombre] || {};
@@ -1218,6 +1256,19 @@ function renderCarros(c){
       tdV.appendChild(inV); tr.appendChild(tdV);
       tb.appendChild(tr);
     });
+    const tra = el('tr'); const tda = el('td'); tda.colSpan = 5; tda.style.padding = '8px 6px';
+    const fA = el('div','fila-ctrl');
+    const aCod = el('input'); aCod.type='text'; aCod.placeholder='Código'; aCod.style.width='100px';
+    const aNom = el('input'); aNom.type='text'; aNom.placeholder='Nuevo insumo para ' + sec.categoria; aNom.style.minWidth='260px';
+    const aStk = el('input'); aStk.type='number'; aStk.placeholder='Stock'; aStk.style.width='80px';
+    const aBtn = el('button','btn btn-sec','+ Agregar insumo');
+    aBtn.onclick = ()=>{
+      const nm = aNom.value.trim(); if(!nm) return;
+      sec.items.push({nombre: nm, stock: parseFloat(aStk.value)||0, codigo: aCod.value.trim()});
+      syncConfig(); render();
+    };
+    fA.append(aCod, aNom, aStk, aBtn);
+    tda.appendChild(fA); tra.appendChild(tda); tb.appendChild(tra);
   });
   tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
   c.appendChild(cardHistorial('Historial — Carros de paro', histCarros(), en=>{
