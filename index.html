@@ -1048,10 +1048,13 @@ function renderRegistro(c){
 
   const card2 = el('div','card');
   const tabla = el('table');
-  tabla.innerHTML = '<thead><tr><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Conteo</th><th style="text-align:center">Vencimiento</th></tr></thead>';
+  tabla.innerHTML = '<thead><tr><th>Código</th><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Conteo</th><th style="text-align:center">Vencimiento</th></tr></thead>';
   const tb = el('tbody');
   DATA().stock_minimo_upc.forEach(it=>{
     const tr = el('tr');
+    const tdc0 = el('td','', it.codigo || '');
+    tdc0.style.cssText = 'color:var(--gris); font-size:12.5px; white-space:nowrap;';
+    tr.appendChild(tdc0);
     tr.appendChild(el('td','',it.nombre));
     tr.appendChild(el('td','min',String(it.stock)));
     const td = el('td','entrada');
@@ -1103,10 +1106,13 @@ function renderEstup(c){
 
   const card2 = el('div','card');
   const tabla = el('table');
-  tabla.innerHTML = '<thead><tr><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Recibo</th><th style="text-align:center">Entrega</th><th style="text-align:center">Vencimiento</th></tr></thead>';
+  tabla.innerHTML = '<thead><tr><th>Código</th><th>Medicamento</th><th style="text-align:center">Stock mín</th><th style="text-align:center">Recibo</th><th style="text-align:center">Entrega</th><th style="text-align:center">Vencimiento</th></tr></thead>';
   const tb = el('tbody');
   DATA().estupefacientes.forEach(it=>{
     const tr = el('tr');
+    const tdc0 = el('td','', it.codigo || '');
+    tdc0.style.cssText = 'color:var(--gris); font-size:12.5px; white-space:nowrap;';
+    tr.appendChild(tdc0);
     tr.appendChild(el('td','',it.nombre));
     tr.appendChild(el('td','min',String(it.stock)));
     ['r','e'].forEach(k=>{
@@ -1186,13 +1192,16 @@ function renderCarros(c){
 
   const card2 = el('div','card');
   const tabla = el('table');
-  tabla.innerHTML = '<thead><tr><th>Ítem</th><th style="text-align:center">Stock</th><th style="text-align:center">Cantidad</th><th style="text-align:center">Vencimiento</th></tr></thead>';
+  tabla.innerHTML = '<thead><tr><th>Código</th><th>Ítem</th><th style="text-align:center">Stock</th><th style="text-align:center">Cantidad</th><th style="text-align:center">Vencimiento</th></tr></thead>';
   const tb = el('tbody');
   carro.secciones.forEach(sec=>{
     const trc = el('tr','cat-row');
-    const tdc = el('td','',sec.categoria); tdc.colSpan=4; trc.appendChild(tdc); tb.appendChild(trc);
+    const tdc = el('td','',sec.categoria); tdc.colSpan=5; trc.appendChild(tdc); tb.appendChild(trc);
     sec.items.forEach(it=>{
       const tr = el('tr');
+      const tdc0 = el('td','', it.codigo || '');
+      tdc0.style.cssText = 'color:var(--gris); font-size:12.5px; white-space:nowrap;';
+      tr.appendChild(tdc0);
       tr.appendChild(el('td','',it.nombre));
       tr.appendChild(el('td','min',String(it.stock)));
       const dat = rev.items[it.nombre] || {};
@@ -1237,15 +1246,15 @@ function setRevItem(hoja, fecha, nombre, k, v){
 function exportarBodega(nombre, soloFaltantes){
   if(typeof XLSX === 'undefined' || !XLSX){ toast('⚠ Necesitas internet para generar el Excel. Recarga (F5).'); return; }
   const items = BODEGAS()[nombre] || [];
-  const filas = [['Cod. Art.','Descripción','Cantidad','Ideal','Faltante','Estado']];
+  const filas = [['Cod. Art.','Descripción','Cantidad','Ideal','Faltante','Vencimiento','Estado']];
   items.forEach(it=>{
     const dif = (parseFloat(it.ideal)||0) - (parseFloat(it.cant)||0);
     if(soloFaltantes && dif <= 0) return;
-    filas.push([it.codigo||'', it.desc||'', parseFloat(it.cant)||0, parseFloat(it.ideal)||0, dif>0?dif:0, it.estado||'ACTIVO']);
+    filas.push([it.codigo||'', it.desc||'', parseFloat(it.cant)||0, parseFloat(it.ideal)||0, dif>0?dif:0, it.venc ? fmtFechaCorta(it.venc) : '', it.estado||'ACTIVO']);
   });
   if(soloFaltantes && filas.length===1){ toast('✔ No hay faltantes en esta bodega'); return; }
   const ws = XLSX.utils.aoa_to_sheet(filas);
-  ws['!cols'] = [{wch:10},{wch:55},{wch:9},{wch:8},{wch:9},{wch:9}];
+  ws['!cols'] = [{wch:10},{wch:55},{wch:9},{wch:8},{wch:9},{wch:12},{wch:9}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, soloFaltantes ? 'Pedido reposicion' : 'Inventario');
   XLSX.writeFile(wb, (soloFaltantes ? 'PEDIDO_REPOSICION_' : 'INVENTARIO_') + nombre.replace(/ /g,'_') + '.xlsx');
@@ -1285,7 +1294,7 @@ function renderBodegas(c){
 
   const card2 = el('div','card');
   const tabla = el('table');
-  tabla.innerHTML = '<thead><tr><th>Código</th><th>Descripción</th><th style="text-align:center">Ideal</th><th style="text-align:center">Cantidad</th><th></th></tr></thead>';
+  tabla.innerHTML = '<thead><tr><th>Código</th><th>Descripción</th><th style="text-align:center">Ideal</th><th style="text-align:center">Cantidad</th><th style="text-align:center">Vencimiento</th><th></th></tr></thead>';
   const tb = el('tbody');
   function filaBod(it){
     const tr = el('tr');
@@ -1301,6 +1310,10 @@ function renderBodegas(c){
     marca();
     iC.oninput = e=>{ const n=parseFloat(e.target.value); it.cant = isNaN(n)?0:n; syncBodega(ctx.bodSel); marca(); };
     tdC.appendChild(iC); tr.appendChild(tdC);
+    const tdVe = el('td','entrada'); const iVe = el('input'); iVe.type='date'; iVe.value = it.venc || '';
+    iVe.className = venceClase(it.venc || '');
+    iVe.onchange = e=>{ it.venc = e.target.value; syncBodega(ctx.bodSel); iVe.className = venceClase(e.target.value); };
+    tdVe.appendChild(iVe); tr.appendChild(tdVe);
     const tdX = el('td','del'); const bd = el('button','btn-mini','✕');
     bd.onclick = ()=>{ const lista=BODEGAS()[ctx.bodSel]; const ix=lista.indexOf(it); if(ix>=0){ lista.splice(ix,1); syncBodega(ctx.bodSel); render(); } };
     tdX.appendChild(bd); tr.appendChild(tdX);
@@ -1673,14 +1686,18 @@ function renderMaestra(c){
 
   const card2 = el('div','card');
   const tabla = el('table');
-  tabla.innerHTML='<thead><tr><th>Medicamento / Insumo</th><th style="text-align:center">Stock mín</th><th></th></tr></thead>';
+  tabla.innerHTML='<thead><tr><th>Código</th><th>Medicamento / Insumo</th><th style="text-align:center">Stock mín</th><th></th></tr></thead>';
   const tb = el('tbody');
   function filaItem(item, lista){
     const tr = el('tr');
+    const td0 = el('td'); td0.style.width='110px';
+    const i0 = el('input'); i0.className='nom'; i0.placeholder='Código'; i0.value = item.codigo || '';
+    i0.oninput = e=>{ item.codigo = e.target.value; syncConfig(); };
+    td0.appendChild(i0);
     const td1 = el('td'); const i1 = el('input'); i1.className='nom'; i1.value=item.nombre; i1.oninput=e=>{item.nombre=e.target.value; syncConfig();}; td1.appendChild(i1);
     const td2 = el('td','entrada'); const i2 = el('input'); i2.value=item.stock; i2.oninput=e=>{const n=parseFloat(e.target.value); item.stock=isNaN(n)?e.target.value:n; syncConfig();}; td2.appendChild(i2);
     const td3 = el('td','del'); const bd = el('button','btn-mini','✕'); bd.onclick=()=>{const ix=lista.indexOf(item); if(ix>=0){lista.splice(ix,1); syncConfig(); render();}}; td3.appendChild(bd);
-    tr.append(td1,td2,td3); return tr;
+    tr.append(td0,td1,td2,td3); return tr;
   }
   if(ctx.tabMaestra < 2){
     const lista = ctx.tabMaestra===0 ? DATA().stock_minimo_upc : DATA().estupefacientes;
@@ -1711,7 +1728,7 @@ function renderMaestra(c){
   } else {
     const carro = DATA().carros[ctx.tabMaestra-2];
     carro.secciones.forEach(sec=>{
-      const trc = el('tr','cat-row'); const tdc = el('td'); tdc.colSpan=3;
+      const trc = el('tr','cat-row'); const tdc = el('td'); tdc.colSpan=4;
       const ic = el('input'); ic.className='nom'; ic.value=sec.categoria; ic.oninput=e=>{sec.categoria=e.target.value; syncConfig();};
       tdc.appendChild(ic); trc.appendChild(tdc); tb.appendChild(trc);
       sec.items.forEach(it=>tb.appendChild(filaItem(it, sec.items)));
