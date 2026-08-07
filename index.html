@@ -1257,11 +1257,11 @@ function renderCarros(c){
       tb.appendChild(tr);
     });
     const tra = el('tr'); const tda = el('td'); tda.colSpan = 5; tda.style.padding = '8px 6px';
-    const fA = el('div','fila-ctrl');
-    const aCod = el('input'); aCod.type='text'; aCod.placeholder='Código'; aCod.style.width='100px';
-    const aNom = el('input'); aNom.type='text'; aNom.placeholder='Nuevo insumo para ' + sec.categoria; aNom.style.minWidth='260px';
-    const aStk = el('input'); aStk.type='number'; aStk.placeholder='Stock'; aStk.style.width='80px';
-    const aBtn = el('button','btn btn-sec','+ Agregar insumo');
+    const fA = el('div'); fA.style.cssText = 'display:flex; gap:8px; align-items:center; flex-wrap:nowrap;';
+    const aCod = el('input'); aCod.type='text'; aCod.placeholder='Código'; aCod.style.cssText = 'width:110px; flex:0 0 auto; text-align:left;';
+    const aNom = el('input'); aNom.type='text'; aNom.placeholder='Nuevo insumo para ' + sec.categoria; aNom.style.cssText = 'flex:1 1 auto; width:auto; min-width:120px; text-align:left;';
+    const aStk = el('input'); aStk.type='number'; aStk.placeholder='Stock'; aStk.style.cssText = 'width:85px; flex:0 0 auto;';
+    const aBtn = el('button','btn btn-sec','+ Agregar insumo'); aBtn.style.cssText = 'flex:0 0 auto; white-space:nowrap;';
     aBtn.onclick = ()=>{
       const nm = aNom.value.trim(); if(!nm) return;
       sec.items.push({nombre: nm, stock: parseFloat(aStk.value)||0, codigo: aCod.value.trim()});
