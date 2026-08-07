@@ -708,7 +708,7 @@ const DEFAULT_DATA = {
 }
 ;
 
-let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} }, bodegas: {} };
+let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} }, bodegas: {}, bhist: {} };
 let cargado = false;
 let ultimaEdicion = 0;
 const pendientes = new Map();   // clave -> {url, body}
@@ -775,7 +775,16 @@ function syncConfig(){
 }
 const BODEGAS = () => { if(!STATE.bodegas) STATE.bodegas = {}; return STATE.bodegas; };
 function syncBodega(nombre){
-  programarUpsert('b:'+nombre, 'upc_bodegas', { bodega: nombre, data: { items: BODEGAS()[nombre] || [] }, updated_at: nowISO() });
+  const items = BODEGAS()[nombre] || [];
+  if(!STATE.bhist) STATE.bhist = {};
+  if(!STATE.bhist[nombre]) STATE.bhist[nombre] = [];
+  const hoyF = hoyISO();
+  const falt = items.filter(it=>(parseFloat(it.cant)||0) < (parseFloat(it.ideal)||0)).length;
+  const h = STATE.bhist[nombre];
+  const ex = h.find(s=>s.fecha===hoyF);
+  if(ex){ ex.falt = falt; ex.total = items.length; } else { h.push({fecha: hoyF, falt: falt, total: items.length}); }
+  if(h.length > 120) h.splice(0, h.length - 120);
+  programarUpsert('b:'+nombre, 'upc_bodegas', { bodega: nombre, data: { items: items, hist: h }, updated_at: nowISO() });
 }
 function reconstruir(cfgRows, stockRows, estupRows, carroRows){
   const st = { config: (cfgRows[0] && cfgRows[0].data) || DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} } };
@@ -799,7 +808,9 @@ async function cargarTodo(silencioso){
     const nuevo = reconstruir(cfg, st, es, ca);
     nuevo.bodegas = {};
     bo.forEach(r=>{ nuevo.bodegas[r.bodega] = (r.data && r.data.items) ? r.data.items : []; });
-    const cambio = JSON.stringify(nuevo) !== JSON.stringify({config: STATE.config, reg: STATE.reg, bodegas: STATE.bodegas || {}});
+    nuevo.bhist = {};
+    bo.forEach(r=>{ nuevo.bhist[r.bodega] = (r.data && r.data.hist) ? r.data.hist : []; });
+    const cambio = JSON.stringify(nuevo) !== JSON.stringify({config: STATE.config, reg: STATE.reg, bodegas: STATE.bodegas || {}, bhist: STATE.bhist || {}});
     if(!cargado){
       STATE = nuevo; cargado = true;
       document.getElementById('unidad').value = DATA().unidad;
@@ -894,6 +905,126 @@ function render(){
 function el(tag, cls, txt){ const e = document.createElement(tag); if(cls) e.className = cls; if(txt!==undefined) e.textContent = txt; return e; }
 function ctrl(labelTxt, input){ const d = el('div'); const l = el('label','lbl',labelTxt); d.append(l, input); return d; }
 
+// ================= historial (subcarpeta desplegable por sección) =================
+function fmtFechaCorta(iso){ const p = (iso||'').split('-'); return p.length===3 ? p[2]+'-'+p[1]+'-'+p[0] : iso; }
+function isoSemana(iso){
+  const d = new Date(iso + 'T00:00:00');
+  const dow = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dow);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function cardHistorial(titulo, entradas, alHacerClick){
+  const det = document.createElement('details');
+  det.className = 'card';
+  const sum = document.createElement('summary');
+  sum.textContent = '📂 ' + titulo + ' (' + entradas.length + ')';
+  sum.style.cssText = 'cursor:pointer; font-weight:700; color:var(--azul); font-size:14px;';
+  det.appendChild(sum);
+  const fr = el('div','fila-ctrl'); fr.style.margin = '10px 0';
+  const selM = el('select');
+  ['Día','Semana','Mes'].forEach(m=>{ const o=el('option','',m); o.value=m; selM.appendChild(o); });
+  const cont = el('div');
+  function pintar(){
+    cont.innerHTML = '';
+    const modo = selM.value;
+    if(!entradas.length){ cont.appendChild(el('p','hint','Aún no hay registros en el historial.')); return; }
+    if(modo === 'Día'){
+      entradas.forEach(en=>{
+        const d = el('div','alert-item ' + (en.alerta ? 'rojo' : 'okk'));
+        d.appendChild(el('span','', '📅 ' + fmtFechaCorta(en.fecha)));
+        d.appendChild(el('span','', en.texto));
+        if(alHacerClick){ d.style.cursor = 'pointer'; d.title = 'Ver este registro'; d.onclick = ()=>alHacerClick(en); }
+        cont.appendChild(d);
+      });
+    } else {
+      const g = {};
+      entradas.forEach(en=>{
+        const k = modo === 'Semana' ? isoSemana(en.fecha) : en.fecha.slice(0,7);
+        if(!g[k]) g[k] = {n:0, al:0};
+        g[k].n++; if(en.alerta) g[k].al++;
+      });
+      Object.keys(g).sort().reverse().forEach(k=>{
+        const d = el('div','alert-item ' + (g[k].al ? 'ambar' : 'okk'));
+        d.appendChild(el('span','', modo === 'Semana' ? '🗓 Semana del ' + fmtFechaCorta(k) : '🗓 Mes ' + k));
+        d.appendChild(el('span','', g[k].n + ' registros · ' + g[k].al + ' con alertas'));
+        cont.appendChild(d);
+      });
+    }
+  }
+  selM.onchange = pintar;
+  fr.append(ctrl('Agrupar por', selM));
+  det.append(fr, cont);
+  pintar();
+  return det;
+}
+function histStock(){
+  const mins = {}; DATA().stock_minimo_upc.forEach(it=>mins[it.nombre]=it.stock);
+  const out = [];
+  Object.keys(REG().stock).forEach(f=>{
+    ['L','N'].forEach(t=>{
+      const rt = REG().stock[f] ? REG().stock[f][t] : null; if(!rt) return;
+      const meds = Object.keys(rt).filter(k=>k.indexOf('__')!==0 && rt[k]!=='' && rt[k]!==undefined);
+      if(!meds.length) return;
+      let bajos = 0;
+      meds.forEach(n=>{ const v=parseFloat(rt[n]); if(!isNaN(v) && typeof mins[n]==='number' && v<mins[n]) bajos++; });
+      out.push({fecha:f, turno:t, texto:'Turno '+t+' · '+meds.length+' conteos · '+bajos+' bajo mínimo'+(rt.__resp?(' · '+rt.__resp):''), alerta:bajos>0});
+    });
+  });
+  return out.sort((a,b)=> a.fecha<b.fecha ? 1 : -1);
+}
+function histEstup(){
+  const mins = {}; DATA().estupefacientes.forEach(it=>mins[it.nombre]=it.stock);
+  const out = [];
+  Object.keys(REG().estup).forEach(f=>{
+    ['L','N'].forEach(t=>{
+      const rt = REG().estup[f] ? REG().estup[f][t] : null; if(!rt) return;
+      let n = 0, bajos = 0;
+      Object.keys(rt).forEach(k=>{
+        if(k.indexOf('__')===0 || !rt[k] || typeof rt[k] !== 'object') return;
+        ['r','e'].forEach(x=>{
+          const v = parseFloat(rt[k][x]);
+          if(!isNaN(v)){ n++; if(typeof mins[k]==='number' && v<mins[k]) bajos++; }
+        });
+      });
+      if(!n && !rt.__pacientes) return;
+      out.push({fecha:f, turno:t, texto:'Turno '+t+' · '+n+' conteos · '+bajos+' bajo mínimo'+(rt.__pacientes?' · con pacientes':'')+(rt.__resp?(' · '+rt.__resp):''), alerta:bajos>0});
+    });
+  });
+  return out.sort((a,b)=> a.fecha<b.fecha ? 1 : -1);
+}
+function histCarros(){
+  const out = [];
+  Object.keys(REG().carros).forEach(h=>{
+    (REG().carros[h]||[]).forEach(rv=>{
+      const n = rv.items ? Object.keys(rv.items).length : 0;
+      if(!n && !rv.resp) return;
+      let bajos = 0;
+      const carro = DATA().carros.find(x=>x.hoja===h);
+      if(carro) carro.secciones.forEach(s=>s.items.forEach(it=>{
+        const dat = rv.items ? rv.items[it.nombre] : null; if(!dat) return;
+        const cv = parseFloat(dat.c); if(!isNaN(cv) && typeof it.stock==='number' && cv<it.stock) bajos++;
+      }));
+      out.push({fecha: rv.fecha, hoja: h, texto: h + ' · ' + n + ' ítems revisados · ' + bajos + ' bajo stock' + (rv.resp?(' · '+rv.resp):''), alerta: bajos>0});
+    });
+  });
+  return out.sort((a,b)=> a.fecha<b.fecha ? 1 : -1);
+}
+function histBodega(nombre){
+  const arr = (STATE.bhist && STATE.bhist[nombre]) ? STATE.bhist[nombre] : [];
+  return arr.map(s=>({fecha: s.fecha, texto: s.falt + ' faltantes de ' + s.total + ' ítems', alerta: s.falt > 0}))
+            .sort((a,b)=> a.fecha<b.fecha ? 1 : -1);
+}
+function logExcel(tipo, detalle){
+  if(!DATA().excelHist) DATA().excelHist = [];
+  DATA().excelHist.push({fecha: hoyISO(), tipo: tipo, detalle: detalle});
+  if(DATA().excelHist.length > 200) DATA().excelHist.splice(0, DATA().excelHist.length - 200);
+  syncConfig();
+}
+function histExcel(){
+  return (DATA().excelHist || []).map(x=>({fecha: x.fecha, texto: x.tipo + ' — ' + x.detalle, alerta: false}))
+                                 .sort((a,b)=> a.fecha<b.fecha ? 1 : -1);
+}
+
 // ================= TAB 1: registro diario =================
 function renderRegistro(c){
   const card = el('div','card');
@@ -939,6 +1070,7 @@ function renderRegistro(c){
     tb.appendChild(tr);
   });
   tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
+  c.appendChild(cardHistorial('Historial — Registro diario', histStock(), en=>{ ctx.fecha = en.fecha; ctx.turno = en.turno; render(); }));
 }
 function setReg(tipo, fecha, turno, clave, valor){
   const R = REG();
@@ -1022,6 +1154,7 @@ function renderEstup(c){
   extra.appendChild(ctrl('Responsable', selResp(rd.__resp || '', v=>setReg('estup', ctx.fechaE, ctx.turnoE, '__resp', v))));
   card2.appendChild(extra);
   c.appendChild(card2);
+  c.appendChild(cardHistorial('Historial — Estupefacientes', histEstup(), en=>{ ctx.fechaE = en.fecha; ctx.turnoE = en.turno; render(); }));
 }
 
 // ================= TAB 3: carros =================
@@ -1078,6 +1211,11 @@ function renderCarros(c){
     });
   });
   tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
+  c.appendChild(cardHistorial('Historial — Carros de paro', histCarros(), en=>{
+    const i = DATA().carros.findIndex(x=>x.hoja===en.hoja);
+    if(i>=0) ctx.carroIdx = i;
+    ctx.fechaC = en.fecha; render();
+  }));
 }
 function getRev(hoja, fecha){
   const R = REG();
@@ -1112,6 +1250,7 @@ function exportarBodega(nombre, soloFaltantes){
   XLSX.utils.book_append_sheet(wb, ws, soloFaltantes ? 'Pedido reposicion' : 'Inventario');
   XLSX.writeFile(wb, (soloFaltantes ? 'PEDIDO_REPOSICION_' : 'INVENTARIO_') + nombre.replace(/ /g,'_') + '.xlsx');
   toast('✅ Excel generado');
+  logExcel(soloFaltantes ? 'Pedido de reposición' : 'Inventario de bodega', nombre);
 }
 function renderBodegas(c){
   const nombres = Object.keys(BODEGAS()).sort();
@@ -1188,6 +1327,7 @@ function renderBodegas(c){
   fr2.append(iCod, iDes, iIde, bAdd);
   card2.appendChild(fr2);
   c.appendChild(card2);
+  c.appendChild(cardHistorial('Historial — ' + ctx.bodSel, histBodega(ctx.bodSel), null));
 }
 
 // ================= TAB 4: panel =================
@@ -1482,6 +1622,7 @@ function renderExcel(c){
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(()=>URL.revokeObjectURL(a.href),4000);
       toast('✅ '+r.nombre+' descargado');
+      logExcel('Excel mensual', MESES_N[ctx.exMes-1] + ' ' + ctx.exAnio + (chk.checked ? ' (con datos)' : ' (en blanco)'));
     }).catch(e=>{console.error(e); toast('Error: '+e.message);});
   };
   fr.append(ctrl('Mes', selM), ctrl('Año', inA), b);
@@ -1491,6 +1632,7 @@ function renderExcel(c){
   card.appendChild(lch);
   card.appendChild(el('p','hint','El archivo incluye 6 hojas: RESUMEN (informe automático con quiebres, cobertura y vencimientos) + Stock Mínimo + Estupefacientes + los 3 carros, con los datos registrados por todo el equipo ya puestos en su lugar y alertas en rojo.'));
   c.appendChild(card);
+  c.appendChild(cardHistorial('Historial — Excel solicitados', histExcel(), null));
 }
 
 // ================= TAB 6: lista maestra =================
