@@ -940,7 +940,7 @@ function isoSemana(iso){
   d.setDate(d.getDate() - dow);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
-function cardHistorial(titulo, entradas, alHacerClick){
+function cardHistorial(titulo, entradas, alHacerClick, pdfDe){
   const det = document.createElement('details');
   det.className = 'card';
   const sum = document.createElement('summary');
@@ -960,6 +960,13 @@ function cardHistorial(titulo, entradas, alHacerClick){
         const d = el('div','alert-item ' + (en.alerta ? 'rojo' : 'okk'));
         d.appendChild(el('span','', '📅 ' + fmtFechaCorta(en.fecha)));
         d.appendChild(el('span','', en.texto));
+        if(pdfDe){
+          const bp = el('button','btn btn-sec','📄 PDF');
+          bp.style.cssText = 'padding:3px 10px; font-size:12px; flex:0 0 auto; margin-left:8px;';
+          bp.title = 'Ver y descargar este registro en PDF';
+          bp.onclick = ev=>{ ev.stopPropagation(); pdfDe(en); };
+          d.appendChild(bp);
+        }
         if(alHacerClick){ d.style.cursor = 'pointer'; d.title = 'Ver este registro'; d.onclick = ()=>alHacerClick(en); }
         cont.appendChild(d);
       });
@@ -1078,21 +1085,25 @@ function crearPDF(titulo, subtitulos, columnas, filas, extraLineas){
   doc.text('Documento generado por el Sistema UPC — ' + fmtFechaCorta(hoyISO()), 14, 288);
   return doc;
 }
-function pdfRegistro(){
-  const rd = ((REG().stock[ctx.fecha]||{})[ctx.turno]) || {};
+function pdfRegistro(pf, pt){
+  const f = (typeof pf==='string' && pf) ? pf : ctx.fecha;
+  const t = (typeof pt==='string' && pt) ? pt : ctx.turno;
+  const rd = ((REG().stock[f]||{})[t]) || {};
   const filas = DATA().stock_minimo_upc.map(it=>[
     it.codigo||'', it.nombre, String(it.stock),
     rd[it.nombre]!==undefined ? String(rd[it.nombre]) : '',
     (DATA().vencStock && DATA().vencStock[it.nombre]) ? fmtFechaCorta(DATA().vencStock[it.nombre]) : ''
   ]);
   const doc = crearPDF('CONTROL STOCK MÍNIMO UPC — ' + DATA().unidad,
-    ['Fecha: ' + fmtFechaCorta(ctx.fecha) + '        Turno: ' + ctx.turno],
+    ['Fecha: ' + fmtFechaCorta(f) + '        Turno: ' + t],
     ['Código','Medicamento','Stock mín','Conteo','Vencimiento'], filas,
     ['Enfermero/a responsable: ' + (rd.__resp || '______________________________'), 'Firma: ______________________________']);
-  if(doc){ doc.save('REGISTRO_DIARIO_' + ctx.fecha + '_' + ctx.turno + '.pdf'); logExcel('PDF Registro diario', fmtFechaCorta(ctx.fecha) + ' turno ' + ctx.turno); }
+  if(doc){ doc.save('REGISTRO_DIARIO_' + f + '_' + t + '.pdf'); logExcel('PDF Registro diario', fmtFechaCorta(f) + ' turno ' + t); }
 }
-function pdfEstup(){
-  const rd = ((REG().estup[ctx.fechaE]||{})[ctx.turnoE]) || {};
+function pdfEstup(pf, pt){
+  const f = (typeof pf==='string' && pf) ? pf : ctx.fechaE;
+  const t = (typeof pt==='string' && pt) ? pt : ctx.turnoE;
+  const rd = ((REG().estup[f]||{})[t]) || {};
   const filas = DATA().estupefacientes.map(it=>{
     const o = rd[it.nombre] || {};
     return [it.codigo||'', it.nombre, String(it.stock),
@@ -1100,16 +1111,18 @@ function pdfEstup(){
       (DATA().vencEstup && DATA().vencEstup[it.nombre]) ? fmtFechaCorta(DATA().vencEstup[it.nombre]) : ''];
   });
   const doc = crearPDF('CONTROL DE ESTUPEFACIENTES — ' + DATA().unidad,
-    ['Fecha: ' + fmtFechaCorta(ctx.fechaE) + '        Turno: ' + ctx.turnoE,
+    ['Fecha: ' + fmtFechaCorta(f) + '        Turno: ' + t,
      'Paciente(s): ' + (rd.__pacientes || '—'),
      'Stock de pacientes: ' + (rd.__pac !== undefined && rd.__pac !== '' ? rd.__pac : '—')],
     ['Código','Medicamento','Stock mín','Recibo','Entrega','Vencimiento'], filas,
     ['Enfermero/a responsable: ' + (rd.__resp || '______________________________'), 'Firma: ______________________________']);
-  if(doc){ doc.save('ESTUPEFACIENTES_' + ctx.fechaE + '_' + ctx.turnoE + '.pdf'); logExcel('PDF Estupefacientes', fmtFechaCorta(ctx.fechaE) + ' turno ' + ctx.turnoE); }
+  if(doc){ doc.save('ESTUPEFACIENTES_' + f + '_' + t + '.pdf'); logExcel('PDF Estupefacientes', fmtFechaCorta(f) + ' turno ' + t); }
 }
-function pdfCarro(){
-  const carro = DATA().carros[ctx.carroIdx];
-  const rev = getRev(carro.hoja, ctx.fechaC);
+function pdfCarro(ph, pf){
+  const carro = (typeof ph==='string' && ph) ? DATA().carros.find(x=>x.hoja===ph) : DATA().carros[ctx.carroIdx];
+  if(!carro) return;
+  const fch = (typeof pf==='string' && pf) ? pf : ctx.fechaC;
+  const rev = getRev(carro.hoja, fch);
   const filas = [];
   carro.secciones.forEach(sec=>{
     filas.push([{content: sec.categoria, colSpan: 5, styles:{ fillColor:[217,217,217], fontStyle:'bold', textColor:[31,78,121] }}]);
@@ -1119,20 +1132,21 @@ function pdfCarro(){
     });
   });
   const doc = crearPDF(carro.titulo + ' — ' + DATA().unidad,
-    ['Fecha de revisión: ' + fmtFechaCorta(ctx.fechaC)],
+    ['Fecha de revisión: ' + fmtFechaCorta(fch)],
     ['Código','Ítem','Stock','Cantidad','Vencimiento'], filas,
     ['Enfermero/a responsable: ' + (rev.resp || '______________________________'), 'Firma: ______________________________']);
-  if(doc){ doc.save('CARRO_PARO_' + ctx.fechaC + '.pdf'); logExcel('PDF Carro de paro', carro.hoja + ' ' + fmtFechaCorta(ctx.fechaC)); }
+  if(doc){ doc.save('CARRO_PARO_' + fch + '.pdf'); logExcel('PDF Carro de paro', carro.hoja + ' ' + fmtFechaCorta(fch)); }
 }
-function pdfBodega(){
-  const items = BODEGAS()[ctx.bodSel] || [];
+function pdfBodega(pn){
+  const nom = (typeof pn==='string' && pn) ? pn : ctx.bodSel;
+  const items = BODEGAS()[nom] || [];
   const falt = items.filter(it=>(parseFloat(it.cant)||0) < (parseFloat(it.ideal)||0)).length;
   const filas = items.map(it=>[it.codigo||'', it.desc||'', String(it.ideal), String(it.cant), it.venc ? fmtFechaCorta(it.venc) : '']);
-  const doc = crearPDF(ctx.bodSel + ' — ' + DATA().unidad,
+  const doc = crearPDF(nom + ' — ' + DATA().unidad,
     ['Fecha: ' + fmtFechaCorta(hoyISO()) + '        Ítems: ' + items.length + '        Faltantes: ' + falt],
     ['Código','Descripción','Ideal','Cantidad','Vencimiento'], filas,
     ['Enfermero/a responsable: ______________________________', 'Firma: ______________________________']);
-  if(doc){ doc.save('BODEGA_' + hoyISO() + '.pdf'); logExcel('PDF Bodega', ctx.bodSel); }
+  if(doc){ doc.save('BODEGA_' + hoyISO() + '.pdf'); logExcel('PDF Bodega', nom); }
 }
 
 // ---- códigos: autocompletar desde los catálogos de bodega ----
@@ -1215,7 +1229,7 @@ function renderRegistro(c){
     tb.appendChild(tr);
   });
   tabla.appendChild(tb); card2.appendChild(tabla); c.appendChild(card2);
-  c.appendChild(cardHistorial('Historial — Registro diario', histStock(), en=>{ ctx.fecha = en.fecha; ctx.turno = en.turno; render(); }));
+  c.appendChild(cardHistorial('Historial — Registro diario', histStock(), en=>{ ctx.fecha = en.fecha; ctx.turno = en.turno; render(); }, en=>pdfRegistro(en.fecha, en.turno)));
 }
 function setReg(tipo, fecha, turno, clave, valor){
   const R = REG();
@@ -1308,7 +1322,7 @@ function renderEstup(c){
   extra.appendChild(ctrl('Responsable', selResp(rd.__resp || '', v=>setReg('estup', ctx.fechaE, ctx.turnoE, '__resp', v))));
   card2.appendChild(extra);
   c.appendChild(card2);
-  c.appendChild(cardHistorial('Historial — Estupefacientes', histEstup(), en=>{ ctx.fechaE = en.fecha; ctx.turnoE = en.turno; render(); }));
+  c.appendChild(cardHistorial('Historial — Estupefacientes', histEstup(), en=>{ ctx.fechaE = en.fecha; ctx.turnoE = en.turno; render(); }, en=>pdfEstup(en.fecha, en.turno)));
 }
 
 // ================= TAB 3: carros =================
@@ -1395,7 +1409,7 @@ function renderCarros(c){
     const i = DATA().carros.findIndex(x=>x.hoja===en.hoja);
     if(i>=0) ctx.carroIdx = i;
     ctx.fechaC = en.fecha; render();
-  }));
+  }, en=>pdfCarro(en.hoja, en.fecha)));
 }
 function getRev(hoja, fecha){
   const R = REG();
@@ -1516,7 +1530,7 @@ function renderBodegas(c){
   fr2.append(iCod, iDes, iIde, iCan, iVen, bAdd);
   card2.appendChild(fr2);
   c.appendChild(card2);
-  c.appendChild(cardHistorial('Historial — ' + ctx.bodSel, histBodega(ctx.bodSel), null));
+  c.appendChild(cardHistorial('Historial — ' + ctx.bodSel, histBodega(ctx.bodSel), null, en=>pdfBodega(ctx.bodSel)));
 }
 
 // ================= TAB 4: panel =================
