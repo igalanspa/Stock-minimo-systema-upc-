@@ -926,7 +926,7 @@ const hoyISO = () => { const h = new Date(); return h.getFullYear() + '-' + Stri
 let ctx = { fecha: hoyISO(), turno: 'L', fechaB: hoyISO(), turnoB: 'L', fechaE: hoyISO(), turnoE: 'L', carroIdx: 0, fechaC: hoyISO(), tabActiva: 0, tabMaestra: 0 };
 
 // ================= navegación =================
-const TABS = ['📝 Registro diario', '🗄 Bodega Stock Mínimo', '💊 Estupefacientes', '🚑 Carros de paro', '📦 Bodegas', '📊 Panel', '📈 Estadísticas', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
+const TABS = ['📝 Registro diario', '🗄 Bodega Stock Mínimo', '💊 Estupefacientes', '🚑 Carros de paro', '📦 Bodega Insumo UCI', '📊 Panel', '📈 Estadísticas', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
 function renderTabs(){
   const nav = document.getElementById('tabs'); nav.innerHTML = '';
   TABS.forEach((t,i)=>{
