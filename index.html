@@ -710,7 +710,7 @@ const DEFAULT_DATA = {
 }
 ;
 
-let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {}, bodsm: {} }, bodegas: {}, bhist: {} };
+let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {}, bodsm: {}, boduci: {} }, bodegas: {}, bhist: {} };
 let cargado = false;
 let ultimaEdicion = 0;
 const pendientes = new Map();   // clave -> {url, body}
@@ -731,8 +731,9 @@ function cargarLocal(){
     p.forEach(par=>pendientes.set(par[0], par[1]));
     const s = JSON.parse(localStorage.getItem(LS_ESTADO)||'null');
     if(s && s.config){
-      STATE = { config: s.config, reg: s.reg||{stock:{},estup:{},carros:{},bodsm:{}}, bodegas: s.bodegas||{}, bhist: s.bhist||{} };
+      STATE = { config: s.config, reg: s.reg||{stock:{},estup:{},carros:{},bodsm:{},boduci:{}}, bodegas: s.bodegas||{}, bhist: s.bhist||{} };
       if(!STATE.reg.bodsm) STATE.reg.bodsm = {};
+      if(!STATE.reg.boduci) STATE.reg.boduci = {};
       return true;
     }
   }catch(e){}
@@ -804,6 +805,10 @@ function syncBodSM(fecha, turno){
   const data = ((REG().bodsm[fecha]||{})[turno]) || {};
   programarUpsert('bs:'+fecha+':'+turno, 'upc_reg_bodsm', { fecha, turno, data, updated_at: nowISO() });
 }
+function syncBodUci(mes){
+  const data = REG().boduci[mes] || {};
+  programarUpsert('bu:'+mes, 'upc_reg_boduci', { mes, data, updated_at: nowISO() });
+}
 const BODEGAS = () => { if(!STATE.bodegas) STATE.bodegas = {}; return STATE.bodegas; };
 function syncBodega(nombre){
   const items = BODEGAS()[nombre] || [];
@@ -829,17 +834,20 @@ function reconstruir(cfgRows, stockRows, estupRows, carroRows){
 }
 async function cargarTodo(silencioso){
   try{
-    const [cfg, st, es, ca, bo, bs] = await Promise.all([
+    const [cfg, st, es, ca, bo, bs, bu] = await Promise.all([
       sbGet('upc_config?select=*'),
       sbGet('upc_reg_stock?select=*'),
       sbGet('upc_reg_estup?select=*'),
       sbGet('upc_reg_carro?select=*'),
       sbGet('upc_bodegas?select=*'),
-      sbGet('upc_reg_bodsm?select=*')
+      sbGet('upc_reg_bodsm?select=*'),
+      sbGet('upc_reg_boduci?select=*')
     ]);
     const nuevo = reconstruir(cfg, st, es, ca);
     nuevo.reg.bodsm = {};
     bs.forEach(r=>{ if(!nuevo.reg.bodsm[r.fecha]) nuevo.reg.bodsm[r.fecha]={}; nuevo.reg.bodsm[r.fecha][r.turno]=r.data||{}; });
+    nuevo.reg.boduci = {};
+    bu.forEach(r=>{ nuevo.reg.boduci[r.mes] = r.data||{}; });
     nuevo.bodegas = {};
     bo.forEach(r=>{ nuevo.bodegas[r.bodega] = (r.data && r.data.items) ? r.data.items : []; });
     nuevo.bhist = {};
@@ -1207,6 +1215,8 @@ function renderRegistro(c){
   card.appendChild(fc);
   card.appendChild(el('p','hint','Anota solo el conteo. Si queda bajo el stock mínimo, se marca rojo al instante. Al terminar, presiona Guardar para confirmar el registro en la base central.'));
   c.appendChild(card);
+  const vAl = cardVencAlertas(DATA().stock_minimo_upc.map(it=>({nombre: it.nombre, venc: (DATA().vencStock||{})[it.nombre] || ''})));
+  if(vAl) c.appendChild(vAl);
 
   const card2 = el('div','card');
   const tabla = el('table');
@@ -1305,6 +1315,8 @@ function renderBodSM(c){
   card.appendChild(fc);
   card.appendChild(el('p','hint','Registra el conteo de la bodega por turno, igual que el Registro diario: si queda bajo el ideal se marca rojo. Al terminar, presiona Guardar para confirmar en la base central.'));
   c.appendChild(card);
+  const vAl = cardVencAlertas(ITEMS_BODSM().map(it=>({nombre: it.desc, venc: it.venc || ''})));
+  if(vAl) c.appendChild(vAl);
 
   const items = ITEMS_BODSM();
   items.sort((a,b)=> normTxt(a.desc||'').localeCompare(normTxt(b.desc||''), 'es'));
@@ -1449,6 +1461,38 @@ function venceClase(v){
   if(dias <= 30) return 'venc-ambar';
   return '';
 }
+function cardVencAlertas(pares){
+  const hoyD = new Date(); hoyD.setHours(0,0,0,0);
+  const vencidos = [], prox = [];
+  pares.forEach(p=>{
+    if(!p.venc) return;
+    const dias = Math.round((new Date(p.venc+'T00:00:00') - hoyD)/86400000);
+    if(dias <= 0) vencidos.push(p);
+    else if(dias <= 30) prox.push({nombre: p.nombre, venc: p.venc, dias: dias});
+  });
+  if(!vencidos.length && !prox.length) return null;
+  const det = document.createElement('details');
+  det.className = 'card';
+  det.open = true;
+  det.style.cssText = vencidos.length ? 'background:#fdecea; border-color:#f2b3ab;' : 'background:#fff8e1; border-color:#e6c96a;';
+  const sum = document.createElement('summary');
+  sum.textContent = '⏰ Alerta de vencimientos: ' + vencidos.length + ' vencido(s) · ' + prox.length + ' por vencer dentro de 30 días';
+  sum.style.cssText = 'cursor:pointer; font-weight:700; font-size:14px; color:' + (vencidos.length ? 'var(--rojo)' : '#8a6d1a') + ';';
+  det.appendChild(sum);
+  vencidos.forEach(p=>{
+    const d = el('div','alert-item rojo');
+    d.appendChild(el('span','', '🔴 ' + p.nombre));
+    d.appendChild(el('span','', 'VENCIDO — ' + fmtFechaCorta(p.venc)));
+    det.appendChild(d);
+  });
+  prox.sort((a,b)=>a.dias-b.dias).forEach(p=>{
+    const d = el('div','alert-item ambar');
+    d.appendChild(el('span','', '🟡 ' + p.nombre));
+    d.appendChild(el('span','', 'vence en ' + p.dias + ' día(s) — ' + fmtFechaCorta(p.venc)));
+    det.appendChild(d);
+  });
+  return det;
+}
 function renderCarros(c){
   const card = el('div','card');
   card.style.cssText = 'background:#fdecea; border-color:#f2b3ab;';
@@ -1587,6 +1631,8 @@ function bloqueBodega(c, nombre){
   card.appendChild(fx);
   card.appendChild(el('p','hint','Registra la cantidad contada de cada ítem: si queda bajo el ideal se marca rojo. El pedido de reposición genera un Excel solo con los faltantes y cuánto pedir a farmacia. Los cambios se comparten con todo el equipo.'));
   c.appendChild(card);
+  const vAlB = cardVencAlertas((BODEGAS()[nombre]||[]).map(it=>({nombre: it.desc, venc: it.venc || ''})));
+  if(vAlB) c.appendChild(vAlB);
 
   const items = BODEGAS()[nombre] || [];
   items.sort((a,b)=> normTxt(a.desc||'').localeCompare(normTxt(b.desc||''), 'es'));
@@ -1648,7 +1694,113 @@ function bloqueBodega(c, nombre){
   const otras = Object.keys(BODEGAS()).filter(n=>n!=='Bodega Stock Mínimo').sort();
   const nombre = otras.indexOf('Bodega Insumos UCI')>=0 ? 'Bodega Insumos UCI' : (otras[0] || 'Bodega Insumos UCI');
   ctx.bodSel = nombre;
-  bloqueBodega(c, nombre);
+  const tgc = el('div','card');
+  const fila = el('div','fila-ctrl');
+  const bv1 = el('button','btn ' + (ctx.bodVista!=='mes'?'btn-gen':'btn-sec'), '📦 Inventario');
+  bv1.onclick = ()=>{ ctx.bodVista='inv'; render(); };
+  const bv2 = el('button','btn ' + (ctx.bodVista==='mes'?'btn-gen':'btn-sec'), '🗓 Conteo mensual');
+  bv2.onclick = ()=>{ ctx.bodVista='mes'; render(); };
+  fila.append(bv1, bv2);
+  tgc.appendChild(fila);
+  c.appendChild(tgc);
+  if(ctx.bodVista==='mes'){ conteoMensualBodega(c, nombre); } else { bloqueBodega(c, nombre); }
+}
+function mesActualISO(){ const h = new Date(); return h.getFullYear() + '-' + String(h.getMonth()+1).padStart(2,'0'); }
+function nombreMes(m){ const p = (m||'').split('-'); return p.length===2 ? (MESES_N[parseInt(p[1],10)-1] + ' ' + p[0]) : m; }
+function histBodUci(nombre){
+  const mins = {}; (BODEGAS()[nombre]||[]).forEach(it=>{ mins[it.desc] = parseFloat(it.ideal)||0; });
+  if(!REG().boduci) REG().boduci = {};
+  return Object.keys(REG().boduci).map(m=>{
+    const rt = REG().boduci[m] || {};
+    const its = Object.keys(rt).filter(k=>k.indexOf('__')!==0 && rt[k]!=='' && rt[k]!==undefined);
+    let bajos = 0;
+    its.forEach(n=>{ const v=parseFloat(rt[n]); if(!isNaN(v) && mins[n]>0 && v<mins[n]) bajos++; });
+    return {fecha: m + '-01', mes: m, texto: 'Mes ' + nombreMes(m) + ' · ' + its.length + ' conteos · ' + bajos + ' bajo ideal' + (rt.__resp?(' · '+rt.__resp):''), alerta: bajos>0};
+  }).filter(e=>e.texto.indexOf(' 0 conteos') < 0 || REG().boduci[e.mes].__resp)
+    .sort((a,b)=> a.mes<b.mes ? 1 : -1);
+}
+function pdfBodUci(pm){
+  const m = (typeof pm==='string' && pm) ? pm : ctx.mesU;
+  const nombre = ctx.bodSel || 'Bodega Insumos UCI';
+  const rd = REG().boduci[m] || {};
+  const items = (BODEGAS()[nombre]||[]).slice().sort((a,b)=> normTxt(a.desc||'').localeCompare(normTxt(b.desc||''), 'es'));
+  const filas = items.map(it=>[
+    it.codigo||'', it.desc||'', String(parseFloat(it.ideal)||0),
+    rd[it.desc]!==undefined ? String(rd[it.desc]) : '',
+    it.venc ? fmtFechaCorta(it.venc) : ''
+  ]);
+  const doc = crearPDF('CONTEO MENSUAL — ' + nombre.toUpperCase() + ' — ' + DATA().unidad,
+    ['Mes: ' + nombreMes(m)],
+    ['Código','Ítem','Ideal','Conteo del mes','Vencimiento'], filas,
+    ['Enfermero/a responsable: ' + (rd.__resp || '______________________________'), 'Firma: ______________________________']);
+  if(doc){ doc.save('CONTEO_MENSUAL_UCI_' + m + '.pdf'); logExcel('PDF Conteo mensual UCI', nombreMes(m)); }
+}
+function conteoMensualBodega(c, nombre){
+  if(!ctx.mesU) ctx.mesU = mesActualISO();
+  if(!REG().boduci) REG().boduci = {};
+  const rd = REG().boduci[ctx.mesU] || {};
+  function setUci(clave, valor){
+    if(!REG().boduci[ctx.mesU]) REG().boduci[ctx.mesU] = {};
+    if(valor === '' || valor === undefined) delete REG().boduci[ctx.mesU][clave];
+    else REG().boduci[ctx.mesU][clave] = valor;
+    syncBodUci(ctx.mesU);
+  }
+  const card = el('div','card');
+  card.style.cssText = 'background:#fdf6e3; border-color:#e3d3a3;';
+  const fc = el('div','fila-ctrl');
+  const pm = (ctx.mesU||'').split('-');
+  const selM = el('select');
+  MESES_N.forEach((mn,i)=>{ const o=el('option','',mn); o.value=String(i+1).padStart(2,'0'); selM.appendChild(o); });
+  selM.value = pm[1];
+  const inA = el('input'); inA.type='number'; inA.min='2024'; inA.max='2100'; inA.value = pm[0]; inA.style.width='90px';
+  function cambiaMes(){ ctx.mesU = inA.value + '-' + selM.value; render(); }
+  selM.onchange = cambiaMes; inA.onchange = cambiaMes;
+  const grpM = el('div'); grpM.style.cssText='display:flex; gap:6px;';
+  grpM.append(selM, inA);
+  const inR = selResp(rd.__resp || '', v=>{ setUci('__resp', v); });
+  const bG = el('button','btn btn-gen','💾 Guardar');
+  bG.onclick = guardarAhora;
+  const bPdf = el('button','btn btn-sec','📄 PDF');
+  bPdf.onclick = ()=>pdfBodUci();
+  fc.append(ctrl('Mes del conteo', grpM), ctrl('Responsable', inR), bG, bPdf);
+  card.appendChild(fc);
+  card.appendChild(el('p','hint','Conteo de la bodega UNA VEZ AL MES: registra la cantidad contada de cada ítem para el mes seleccionado. Si queda bajo el ideal se marca rojo. Queda guardado por mes en la base central, con su historial y PDF.'));
+  c.appendChild(card);
+  const vAl = cardVencAlertas((BODEGAS()[nombre]||[]).map(it=>({nombre: it.desc, venc: it.venc || ''})));
+  if(vAl) c.appendChild(vAl);
+
+  const items = BODEGAS()[nombre] || [];
+  items.sort((a,b)=> normTxt(a.desc||'').localeCompare(normTxt(b.desc||''), 'es'));
+  const its = Object.keys(rd).filter(k=>k.indexOf('__')!==0 && rd[k]!=='' && rd[k]!==undefined);
+  let bajos = 0;
+  items.forEach(it=>{ const v=parseFloat(rd[it.desc]); if(!isNaN(v) && (parseFloat(it.ideal)||0)>0 && v<(parseFloat(it.ideal)||0)) bajos++; });
+  c.appendChild(kpiRow([[items.length,'Ítems en la bodega',false],[its.length,'Contados este mes',false],[bajos,'Bajo el ideal',bajos>0]]));
+
+  const card2 = el('div','card');
+  const tabla = el('table');
+  tabla.innerHTML = '<thead><tr><th>Código</th><th>Ítem</th><th style="text-align:center">Ideal</th><th style="text-align:center">Conteo del mes</th><th style="text-align:center">Vencimiento</th></tr></thead>';
+  const tb = el('tbody');
+  items.forEach(it=>{
+    const tr = el('tr');
+    tr.appendChild(el('td','',it.codigo||''));
+    tr.appendChild(el('td','',it.desc||''));
+    tr.appendChild(el('td','min',String(parseFloat(it.ideal)||0)));
+    const td = el('td','entrada');
+    const inp = el('input'); inp.type='number'; inp.min='0'; inp.value = rd[it.desc] !== undefined ? rd[it.desc] : '';
+    const marca = ()=>{ const v=parseFloat(inp.value); const id2=parseFloat(it.ideal)||0; inp.classList.toggle('bajo', !isNaN(v) && id2>0 && v<id2); };
+    marca();
+    inp.oninput = e=>{ setUci(it.desc, e.target.value); marca(); };
+    td.appendChild(inp); tr.appendChild(td);
+    const tdV = el('td','entrada');
+    const inV = el('input'); inV.type='date'; inV.value = it.venc || '';
+    inV.className = venceClase(inV.value);
+    inV.onchange = e=>{ it.venc = e.target.value; syncBodega(nombre); inV.className = venceClase(e.target.value); };
+    tdV.appendChild(inV); tr.appendChild(tdV);
+    tb.appendChild(tr);
+  });
+  tabla.appendChild(tb); card2.appendChild(tabla);
+  c.appendChild(card2);
+  c.appendChild(cardHistorial('Historial — Conteo mensual ' + nombre, histBodUci(nombre), en=>{ ctx.mesU = en.mes; render(); }, en=>pdfBodUci(en.mes)));
 }
 
 
