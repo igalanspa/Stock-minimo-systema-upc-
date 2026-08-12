@@ -1242,7 +1242,7 @@ function renderRegistro(c){
     if(!DATA().vencStock) DATA().vencStock = {};
     inV.value = DATA().vencStock[it.nombre] || '';
     inV.className = venceClase(inV.value);
-    inV.onchange = e=>{ DATA().vencStock[it.nombre] = e.target.value; syncConfig(); inV.className = venceClase(e.target.value); };
+    inV.onchange = e=>{ DATA().vencStock[it.nombre] = e.target.value; syncConfig(); propagarVenc(it.codigo, e.target.value); inV.className = venceClase(e.target.value); };
     tdV.appendChild(inV); tr.appendChild(tdV);
     tb.appendChild(tr);
   });
@@ -1343,7 +1343,7 @@ function renderBodSM(c){
     const inV = el('input'); inV.type='date';
     inV.value = it.venc || '';
     inV.className = venceClase(inV.value);
-    inV.onchange = e=>{ it.venc = e.target.value; syncBodega(BODSM_NOMBRE); inV.className = venceClase(e.target.value); };
+    inV.onchange = e=>{ it.venc = e.target.value; syncBodega(BODSM_NOMBRE); propagarVenc(it.codigo, e.target.value); inV.className = venceClase(e.target.value); };
     tdV.appendChild(inV); tr.appendChild(tdV);
     const tdX = el('td','del'); const bd = el('button','btn-mini','✕');
     bd.onclick = ()=>{ const ix=items.indexOf(it); if(ix>=0){ items.splice(ix,1); syncBodega(BODSM_NOMBRE); render(); } };
@@ -1460,6 +1460,23 @@ function venceClase(v){
   if(dias <= 0) return 'venc-rojo';
   if(dias <= 30) return 'venc-ambar';
   return '';
+}
+function propagarVenc(codigo, fecha){
+  const cod = (codigo===undefined||codigo===null) ? '' : String(codigo).trim();
+  if(!cod) return;
+  if(!DATA().vencStock) DATA().vencStock = {};
+  let cambioCfg = false;
+  DATA().stock_minimo_upc.forEach(it=>{
+    if(String(it.codigo||'').trim() === cod && DATA().vencStock[it.nombre] !== fecha){ DATA().vencStock[it.nombre] = fecha; cambioCfg = true; }
+  });
+  if(cambioCfg) syncConfig();
+  Object.keys(BODEGAS()).forEach(nb=>{
+    let cambio = false;
+    (BODEGAS()[nb]||[]).forEach(it=>{
+      if(String(it.codigo||'').trim() === cod && it.venc !== fecha){ it.venc = fecha; cambio = true; }
+    });
+    if(cambio) syncBodega(nb);
+  });
 }
 function cardVencAlertas(pares){
   const hoyD = new Date(); hoyD.setHours(0,0,0,0);
@@ -1659,7 +1676,7 @@ function bloqueBodega(c, nombre){
     tdC.appendChild(iC); tr.appendChild(tdC);
     const tdVe = el('td','entrada'); const iVe = el('input'); iVe.type='date'; iVe.value = it.venc || '';
     iVe.className = venceClase(it.venc || '');
-    iVe.onchange = e=>{ it.venc = e.target.value; syncBodega(nombre); iVe.className = venceClase(e.target.value); };
+    iVe.onchange = e=>{ it.venc = e.target.value; syncBodega(nombre); propagarVenc(it.codigo, e.target.value); iVe.className = venceClase(e.target.value); };
     tdVe.appendChild(iVe); tr.appendChild(tdVe);
     const tdX = el('td','del'); const bd = el('button','btn-mini','✕');
     bd.onclick = ()=>{ const lista=BODEGAS()[nombre]; const ix=lista.indexOf(it); if(ix>=0){ lista.splice(ix,1); syncBodega(nombre); render(); } };
@@ -1794,7 +1811,7 @@ function conteoMensualBodega(c, nombre){
     const tdV = el('td','entrada');
     const inV = el('input'); inV.type='date'; inV.value = it.venc || '';
     inV.className = venceClase(inV.value);
-    inV.onchange = e=>{ it.venc = e.target.value; syncBodega(nombre); inV.className = venceClase(e.target.value); };
+    inV.onchange = e=>{ it.venc = e.target.value; syncBodega(nombre); propagarVenc(it.codigo, e.target.value); inV.className = venceClase(e.target.value); };
     tdV.appendChild(inV); tr.appendChild(tdV);
     tb.appendChild(tr);
   });
