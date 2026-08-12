@@ -710,7 +710,7 @@ const DEFAULT_DATA = {
 }
 ;
 
-let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {} }, bodegas: {}, bhist: {} };
+let STATE = { config: DEFAULT_DATA, reg: { stock: {}, estup: {}, carros: {}, bodsm: {} }, bodegas: {}, bhist: {} };
 let cargado = false;
 let ultimaEdicion = 0;
 const pendientes = new Map();   // clave -> {url, body}
@@ -731,7 +731,8 @@ function cargarLocal(){
     p.forEach(par=>pendientes.set(par[0], par[1]));
     const s = JSON.parse(localStorage.getItem(LS_ESTADO)||'null');
     if(s && s.config){
-      STATE = { config: s.config, reg: s.reg||{stock:{},estup:{},carros:{}}, bodegas: s.bodegas||{}, bhist: s.bhist||{} };
+      STATE = { config: s.config, reg: s.reg||{stock:{},estup:{},carros:{},bodsm:{}}, bodegas: s.bodegas||{}, bhist: s.bhist||{} };
+      if(!STATE.reg.bodsm) STATE.reg.bodsm = {};
       return true;
     }
   }catch(e){}
@@ -799,6 +800,10 @@ function syncCarro(hoja, fecha){
 function syncConfig(){
   programarUpsert('config', 'upc_config', { id: 1, data: STATE.config, updated_at: nowISO() });
 }
+function syncBodSM(fecha, turno){
+  const data = ((REG().bodsm[fecha]||{})[turno]) || {};
+  programarUpsert('bs:'+fecha+':'+turno, 'upc_reg_bodsm', { fecha, turno, data, updated_at: nowISO() });
+}
 const BODEGAS = () => { if(!STATE.bodegas) STATE.bodegas = {}; return STATE.bodegas; };
 function syncBodega(nombre){
   const items = BODEGAS()[nombre] || [];
@@ -824,14 +829,17 @@ function reconstruir(cfgRows, stockRows, estupRows, carroRows){
 }
 async function cargarTodo(silencioso){
   try{
-    const [cfg, st, es, ca, bo] = await Promise.all([
+    const [cfg, st, es, ca, bo, bs] = await Promise.all([
       sbGet('upc_config?select=*'),
       sbGet('upc_reg_stock?select=*'),
       sbGet('upc_reg_estup?select=*'),
       sbGet('upc_reg_carro?select=*'),
-      sbGet('upc_bodegas?select=*')
+      sbGet('upc_bodegas?select=*'),
+      sbGet('upc_reg_bodsm?select=*')
     ]);
     const nuevo = reconstruir(cfg, st, es, ca);
+    nuevo.reg.bodsm = {};
+    bs.forEach(r=>{ if(!nuevo.reg.bodsm[r.fecha]) nuevo.reg.bodsm[r.fecha]={}; nuevo.reg.bodsm[r.fecha][r.turno]=r.data||{}; });
     nuevo.bodegas = {};
     bo.forEach(r=>{ nuevo.bodegas[r.bodega] = (r.data && r.data.items) ? r.data.items : []; });
     nuevo.bhist = {};
@@ -907,10 +915,10 @@ const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agost
 const hoyISO = () => { const h = new Date(); return h.getFullYear() + '-' + String(h.getMonth()+1).padStart(2,'0') + '-' + String(h.getDate()).padStart(2,'0'); };
 
 // contexto de registro
-let ctx = { fecha: hoyISO(), turno: 'L', fechaE: hoyISO(), turnoE: 'L', carroIdx: 0, fechaC: hoyISO(), tabActiva: 0, tabMaestra: 0 };
+let ctx = { fecha: hoyISO(), turno: 'L', fechaB: hoyISO(), turnoB: 'L', fechaE: hoyISO(), turnoE: 'L', carroIdx: 0, fechaC: hoyISO(), tabActiva: 0, tabMaestra: 0 };
 
 // ================= navegación =================
-const TABS = ['📝 Registro diario', '💊 Estupefacientes', '🚑 Carros de paro', '📦 Bodegas', '📊 Panel', '📈 Estadísticas', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
+const TABS = ['📝 Registro diario', '🗄 Bodega Stock Mínimo', '💊 Estupefacientes', '🚑 Carros de paro', '📦 Bodegas', '📊 Panel', '📈 Estadísticas', '📄 Excel del mes', '⚙️ Lista maestra', '💾 Respaldo'];
 function renderTabs(){
   const nav = document.getElementById('tabs'); nav.innerHTML = '';
   TABS.forEach((t,i)=>{
@@ -925,7 +933,7 @@ function render(){
   if(!cargado) return;
   renderTabs();
   const c = document.getElementById('contenido'); c.innerHTML = '';
-  [renderRegistro, renderEstup, renderCarros, renderBodegas, renderPanel, renderStats, renderExcel, renderMaestra, renderRespaldo][ctx.tabActiva](c);
+  [renderRegistro, renderBodSM, renderEstup, renderCarros, renderBodegas, renderPanel, renderStats, renderExcel, renderMaestra, renderRespaldo][ctx.tabActiva](c);
 }
 
 // helpers de dom
@@ -1237,7 +1245,115 @@ function setReg(tipo, fecha, turno, clave, valor){
   if(!R[tipo][fecha][turno]) R[tipo][fecha][turno] = {};
   if(valor === '' || valor === undefined) delete R[tipo][fecha][turno][clave];
   else R[tipo][fecha][turno][clave] = valor;
-  (tipo === 'stock' ? syncStock : syncEstup)(fecha, turno);
+  (tipo === 'stock' ? syncStock : tipo === 'bodsm' ? syncBodSM : syncEstup)(fecha, turno);
+}
+
+// ================= TAB: bodega stock mínimo (registro por turno) =================
+const BODSM_NOMBRE = 'Bodega Stock Mínimo';
+const ITEMS_BODSM = () => { if(!BODEGAS()[BODSM_NOMBRE]) BODEGAS()[BODSM_NOMBRE] = []; return BODEGAS()[BODSM_NOMBRE]; };
+function histBodSM(){
+  const mins = {}; ITEMS_BODSM().forEach(it=>{ mins[it.desc] = parseFloat(it.ideal)||0; });
+  const out = [];
+  if(!REG().bodsm) REG().bodsm = {};
+  Object.keys(REG().bodsm).forEach(f=>{
+    ['L','N'].forEach(t=>{
+      const rt = REG().bodsm[f] ? REG().bodsm[f][t] : null; if(!rt) return;
+      const its = Object.keys(rt).filter(k=>k.indexOf('__')!==0 && rt[k]!=='' && rt[k]!==undefined);
+      if(!its.length && !rt.__resp) return;
+      let bajos = 0;
+      its.forEach(n=>{ const v=parseFloat(rt[n]); if(!isNaN(v) && mins[n]>0 && v<mins[n]) bajos++; });
+      out.push({fecha:f, turno:t, texto:'Turno '+t+' · '+its.length+' conteos · '+bajos+' bajo ideal'+(rt.__resp?(' · '+rt.__resp):''), alerta:bajos>0});
+    });
+  });
+  return out.sort((a,b)=> a.fecha<b.fecha ? 1 : -1);
+}
+function pdfBodSM(pf, pt){
+  const f = (typeof pf==='string' && pf) ? pf : ctx.fechaB;
+  const t = (typeof pt==='string' && pt) ? pt : ctx.turnoB;
+  const rd = ((REG().bodsm[f]||{})[t]) || {};
+  const items = ITEMS_BODSM().slice().sort((a,b)=> normTxt(a.desc||'').localeCompare(normTxt(b.desc||''), 'es'));
+  const filas = items.map(it=>[
+    it.codigo||'', it.desc||'', String(parseFloat(it.ideal)||0),
+    rd[it.desc]!==undefined ? String(rd[it.desc]) : '',
+    it.venc ? fmtFechaCorta(it.venc) : ''
+  ]);
+  const doc = crearPDF('BODEGA STOCK MÍNIMO — ' + DATA().unidad,
+    ['Fecha: ' + fmtFechaCorta(f) + '        Turno: ' + t],
+    ['Código','Ítem','Ideal','Conteo','Vencimiento'], filas,
+    ['Enfermero/a responsable: ' + (rd.__resp || '______________________________'), 'Firma: ______________________________']);
+  if(doc){ doc.save('BODEGA_STOCK_MINIMO_' + f + '_' + t + '.pdf'); logExcel('PDF Bodega Stock Mínimo', fmtFechaCorta(f) + ' turno ' + t); }
+}
+function renderBodSM(c){
+  const card = el('div','card');
+  card.style.cssText = 'background:#fdf6e3; border-color:#e3d3a3;';
+  const fc = el('div','fila-ctrl');
+  const inF = el('input'); inF.type='date'; inF.value=ctx.fechaB; inF.onchange=e=>{ctx.fechaB=e.target.value; render();};
+  const tg = el('div','turno-tg');
+  ['L','N'].forEach(t=>{
+    const b = el('button', t===ctx.turnoB?'act':'', t==='L'?'☀ Turno L':'🌙 Turno N');
+    b.onclick=()=>{ctx.turnoB=t; render();};
+    tg.appendChild(b);
+  });
+  if(!REG().bodsm) REG().bodsm = {};
+  const rd = ((REG().bodsm[ctx.fechaB]||{})[ctx.turnoB]) || {};
+  const inR = selResp(rd.__resp || '', v=>{ setReg('bodsm', ctx.fechaB, ctx.turnoB, '__resp', v); });
+  const bG = el('button','btn btn-gen','💾 Guardar');
+  bG.onclick = guardarAhora;
+  const bPdf = el('button','btn btn-sec','📄 PDF');
+  bPdf.onclick = ()=>pdfBodSM();
+  fc.append(ctrl('Fecha', inF), ctrl('Turno', tg), ctrl('Responsable', inR), bG, bPdf);
+  card.appendChild(fc);
+  card.appendChild(el('p','hint','Registra el conteo de la bodega por turno, igual que el Registro diario: si queda bajo el ideal se marca rojo. Al terminar, presiona Guardar para confirmar en la base central.'));
+  c.appendChild(card);
+
+  const items = ITEMS_BODSM();
+  items.sort((a,b)=> normTxt(a.desc||'').localeCompare(normTxt(b.desc||''), 'es'));
+  const card2 = el('div','card');
+  const tabla = el('table');
+  tabla.innerHTML = '<thead><tr><th>Código</th><th>Ítem</th><th style="text-align:center">Ideal</th><th style="text-align:center">Conteo</th><th style="text-align:center">Vencimiento</th><th></th></tr></thead>';
+  const tb = el('tbody');
+  items.forEach(it=>{
+    const tr = el('tr');
+    const tdc0 = el('td'); tdc0.style.width = '95px';
+    const ic0 = el('input'); ic0.className = 'nom'; ic0.placeholder = 'Código'; ic0.style.cssText = 'width:90px; color:var(--gris); font-size:12.5px;';
+    ic0.value = it.codigo || '';
+    ic0.oninput = e=>{ it.codigo = e.target.value; syncBodega(BODSM_NOMBRE); };
+    tdc0.appendChild(ic0); tr.appendChild(tdc0);
+    tr.appendChild(el('td','',it.desc||''));
+    tr.appendChild(el('td','min',String(parseFloat(it.ideal)||0)));
+    const td = el('td','entrada');
+    const inp = el('input'); inp.type='number'; inp.min='0'; inp.value = rd[it.desc] !== undefined ? rd[it.desc] : '';
+    const marca = ()=>{ const v=parseFloat(inp.value); const id2=parseFloat(it.ideal)||0; inp.classList.toggle('bajo', !isNaN(v) && id2>0 && v<id2); };
+    marca();
+    inp.oninput = e=>{ setReg('bodsm', ctx.fechaB, ctx.turnoB, it.desc, e.target.value); marca(); };
+    td.appendChild(inp); tr.appendChild(td);
+    const tdV = el('td','entrada');
+    const inV = el('input'); inV.type='date';
+    inV.value = it.venc || '';
+    inV.className = venceClase(inV.value);
+    inV.onchange = e=>{ it.venc = e.target.value; syncBodega(BODSM_NOMBRE); inV.className = venceClase(e.target.value); };
+    tdV.appendChild(inV); tr.appendChild(tdV);
+    const tdX = el('td','del'); const bd = el('button','btn-mini','✕');
+    bd.onclick = ()=>{ const ix=items.indexOf(it); if(ix>=0){ items.splice(ix,1); syncBodega(BODSM_NOMBRE); render(); } };
+    tdX.appendChild(bd); tr.appendChild(tdX);
+    tb.appendChild(tr);
+  });
+  tabla.appendChild(tb); card2.appendChild(tabla);
+  const fr2 = el('div'); fr2.style.cssText = 'display:flex; gap:8px; align-items:center; flex-wrap:nowrap; margin-top:10px;';
+  const iCod = el('input'); iCod.type='text'; iCod.placeholder='Código'; iCod.style.cssText='width:100px; flex:0 0 auto;';
+  const iDes = el('input'); iDes.type='text'; iDes.placeholder='Descripción del nuevo ítem'; iDes.style.cssText='flex:1 1 auto; width:auto; min-width:120px;';
+  const iIde = el('input'); iIde.type='number'; iIde.placeholder='Ideal'; iIde.style.cssText='width:80px; flex:0 0 auto;';
+  const iVen = el('input'); iVen.type='date'; iVen.title='Vencimiento'; iVen.style.cssText='width:150px; flex:0 0 auto;';
+  const bAdd = el('button','btn btn-sec','+ Agregar ítem'); bAdd.style.cssText='flex:0 0 auto; white-space:nowrap;';
+  bAdd.onclick = ()=>{
+    const d = iDes.value.trim(); if(!d) return;
+    ITEMS_BODSM().push({codigo: iCod.value.trim(), desc: d, cant: 0, ideal: parseFloat(iIde.value)||0, venc: iVen.value||'', estado:'ACTIVO'});
+    syncBodega(BODSM_NOMBRE); render();
+  };
+  fr2.append(iCod, iDes, iIde, iVen, bAdd);
+  card2.appendChild(fr2);
+  c.appendChild(card2);
+  c.appendChild(cardHistorial('Historial — Bodega Stock Mínimo', histBodSM(), en=>{ ctx.fechaB = en.fecha; ctx.turnoB = en.turno; render(); }, en=>pdfBodSM(en.fecha, en.turno)));
 }
 
 // ================= TAB 2: estupefacientes =================
@@ -1446,36 +1562,33 @@ function exportarBodega(nombre, soloFaltantes){
   toast('✅ Excel generado');
   logExcel(soloFaltantes ? 'Pedido de reposición' : 'Inventario de bodega', nombre);
 }
-function renderBodegas(c){
-  const nombres = Object.keys(BODEGAS()).sort();
+function bloqueBodega(c, nombre){
   const card = el('div','card');
   card.style.cssText = 'background:#fdf6e3; border-color:#e3d3a3;';
   const fc = el('div','fila-ctrl');
-  const sel = el('select');
-  nombres.forEach(n=>{ const o=el('option','',n); o.value=n; sel.appendChild(o); });
-  if(ctx.bodSel===undefined || nombres.indexOf(ctx.bodSel)<0) ctx.bodSel = nombres[0] || '';
-  sel.value = ctx.bodSel;
-  sel.onchange = e=>{ ctx.bodSel = e.target.value; ctx.bodFiltro=''; render(); };
+  const tit = el('div','', '📦 ' + nombre);
+  tit.style.cssText = 'font-weight:700; color:var(--azul); font-size:15px; flex:0 0 auto;';
   const inB = el('input'); inB.type='text'; inB.placeholder='Buscar ítem o código…'; inB.style.minWidth='220px';
-  inB.value = ctx.bodFiltro || '';
-  inB.oninput = e=>{ ctx.bodFiltro = e.target.value; pintarFilas(); };
+  if(!ctx.bodF) ctx.bodF = {};
+  inB.value = ctx.bodF[nombre] || '';
+  inB.oninput = e=>{ ctx.bodF[nombre] = e.target.value; pintarFilas(); };
   const bG = el('button','btn btn-gen','💾 Guardar');
   bG.onclick = guardarAhora;
-  fc.append(ctrl('Bodega', sel), ctrl('Buscar', inB), bG);
+  fc.append(tit, ctrl('Buscar', inB), bG);
   card.appendChild(fc);
   const fx = el('div','fila-ctrl'); fx.style.marginTop='8px';
   const b1 = el('button','btn btn-sec','⬇ Excel inventario');
-  b1.onclick = ()=>exportarBodega(ctx.bodSel, false);
+  b1.onclick = ()=>exportarBodega(nombre, false);
   const b2 = el('button','btn btn-sec','⬇ Excel pedido de reposición (faltantes)');
-  b2.onclick = ()=>exportarBodega(ctx.bodSel, true);
+  b2.onclick = ()=>exportarBodega(nombre, true);
   const b3 = el('button','btn btn-sec','📄 PDF');
-  b3.onclick = pdfBodega;
+  b3.onclick = ()=>pdfBodega(nombre);
   fx.append(b1, b2, b3);
   card.appendChild(fx);
   card.appendChild(el('p','hint','Registra la cantidad contada de cada ítem: si queda bajo el ideal se marca rojo. El pedido de reposición genera un Excel solo con los faltantes y cuánto pedir a farmacia. Los cambios se comparten con todo el equipo.'));
   c.appendChild(card);
 
-  const items = BODEGAS()[ctx.bodSel] || [];
+  const items = BODEGAS()[nombre] || [];
   items.sort((a,b)=> normTxt(a.desc||'').localeCompare(normTxt(b.desc||''), 'es'));
   const falt = items.filter(it=>(parseFloat(it.cant)||0) < (parseFloat(it.ideal)||0)).length;
   c.appendChild(kpiRow([[items.length,'Ítems en la bodega',false],[falt,'Bajo el ideal (faltantes)',falt>0],[items.length-falt,'Completos',false]]));
@@ -1488,22 +1601,22 @@ function renderBodegas(c){
     const tr = el('tr');
     tr.appendChild(el('td','',it.codigo||''));
     const tdD = el('td'); const iD = el('input'); iD.className='nom'; iD.value=it.desc||'';
-    iD.oninput = e=>{ it.desc=e.target.value; syncBodega(ctx.bodSel); };
+    iD.oninput = e=>{ it.desc=e.target.value; syncBodega(nombre); };
     tdD.appendChild(iD); tr.appendChild(tdD);
     const tdI = el('td','entrada'); const iI = el('input'); iI.type='number'; iI.min='0'; iI.value = it.ideal;
-    iI.oninput = e=>{ const n=parseFloat(e.target.value); it.ideal = isNaN(n)?0:n; syncBodega(ctx.bodSel); marca(); };
+    iI.oninput = e=>{ const n=parseFloat(e.target.value); it.ideal = isNaN(n)?0:n; syncBodega(nombre); marca(); };
     tdI.appendChild(iI); tr.appendChild(tdI);
     const tdC = el('td','entrada'); const iC = el('input'); iC.type='number'; iC.min='0'; iC.value = it.cant;
     function marca(){ const v=parseFloat(iC.value)||0, id2=parseFloat(iI.value)||0; iC.classList.toggle('bajo', id2>0 && v<id2); }
     marca();
-    iC.oninput = e=>{ const n=parseFloat(e.target.value); it.cant = isNaN(n)?0:n; syncBodega(ctx.bodSel); marca(); };
+    iC.oninput = e=>{ const n=parseFloat(e.target.value); it.cant = isNaN(n)?0:n; syncBodega(nombre); marca(); };
     tdC.appendChild(iC); tr.appendChild(tdC);
     const tdVe = el('td','entrada'); const iVe = el('input'); iVe.type='date'; iVe.value = it.venc || '';
     iVe.className = venceClase(it.venc || '');
-    iVe.onchange = e=>{ it.venc = e.target.value; syncBodega(ctx.bodSel); iVe.className = venceClase(e.target.value); };
+    iVe.onchange = e=>{ it.venc = e.target.value; syncBodega(nombre); iVe.className = venceClase(e.target.value); };
     tdVe.appendChild(iVe); tr.appendChild(tdVe);
     const tdX = el('td','del'); const bd = el('button','btn-mini','✕');
-    bd.onclick = ()=>{ const lista=BODEGAS()[ctx.bodSel]; const ix=lista.indexOf(it); if(ix>=0){ lista.splice(ix,1); syncBodega(ctx.bodSel); render(); } };
+    bd.onclick = ()=>{ const lista=BODEGAS()[nombre]; const ix=lista.indexOf(it); if(ix>=0){ lista.splice(ix,1); syncBodega(nombre); render(); } };
     tdX.appendChild(bd); tr.appendChild(tdX);
     tr.dataset.busq = ((it.codigo||'') + ' ' + (it.desc||'')).toLowerCase();
     return tr;
@@ -1511,7 +1624,7 @@ function renderBodegas(c){
   items.forEach(it=>tb.appendChild(filaBod(it)));
   tabla.appendChild(tb); card2.appendChild(tabla);
   function pintarFilas(){
-    const f = (ctx.bodFiltro||'').toLowerCase().trim();
+    const f = (ctx.bodF[nombre]||'').toLowerCase().trim();
     Array.from(tb.children).forEach(tr=>{ tr.style.display = (!f || tr.dataset.busq.indexOf(f)>=0) ? '' : 'none'; });
   }
   pintarFilas();
@@ -1524,14 +1637,20 @@ function renderBodegas(c){
   const bAdd = el('button','btn btn-sec','+ Agregar ítem'); bAdd.style.cssText='flex:0 0 auto; white-space:nowrap;';
   bAdd.onclick = ()=>{
     const d = iDes.value.trim(); if(!d) return;
-    BODEGAS()[ctx.bodSel].push({codigo: iCod.value.trim(), desc: d, cant: parseFloat(iCan.value)||0, ideal: parseFloat(iIde.value)||0, venc: iVen.value||'', estado:'ACTIVO'});
-    syncBodega(ctx.bodSel); render();
+    BODEGAS()[nombre].push({codigo: iCod.value.trim(), desc: d, cant: parseFloat(iCan.value)||0, ideal: parseFloat(iIde.value)||0, venc: iVen.value||'', estado:'ACTIVO'});
+    syncBodega(nombre); render();
   };
   fr2.append(iCod, iDes, iIde, iCan, iVen, bAdd);
   card2.appendChild(fr2);
   c.appendChild(card2);
-  c.appendChild(cardHistorial('Historial — ' + ctx.bodSel, histBodega(ctx.bodSel), null, en=>pdfBodega(ctx.bodSel)));
+  c.appendChild(cardHistorial('Historial — ' + nombre, histBodega(nombre), null, en=>pdfBodega(nombre)));
+}function renderBodegas(c){
+  const otras = Object.keys(BODEGAS()).filter(n=>n!=='Bodega Stock Mínimo').sort();
+  const nombre = otras.indexOf('Bodega Insumos UCI')>=0 ? 'Bodega Insumos UCI' : (otras[0] || 'Bodega Insumos UCI');
+  ctx.bodSel = nombre;
+  bloqueBodega(c, nombre);
 }
+
 
 // ================= TAB 4: panel =================
 function renderPanel(c){
