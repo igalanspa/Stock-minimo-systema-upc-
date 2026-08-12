@@ -1696,7 +1696,7 @@ function bloqueBodega(c, nombre){
   ctx.bodSel = nombre;
   const tgc = el('div','card');
   const fila = el('div','fila-ctrl');
-  const bv1 = el('button','btn ' + (ctx.bodVista!=='mes'?'btn-gen':'btn-sec'), '📦 Inventario');
+  const bv1 = el('button','btn ' + (ctx.bodVista!=='mes'?'btn-gen':'btn-sec'), '📦 Control diario');
   bv1.onclick = ()=>{ ctx.bodVista='inv'; render(); };
   const bv2 = el('button','btn ' + (ctx.bodVista==='mes'?'btn-gen':'btn-sec'), '🗓 Conteo mensual');
   bv2.onclick = ()=>{ ctx.bodVista='mes'; render(); };
