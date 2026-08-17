@@ -1931,17 +1931,21 @@ function calcStats(mes, anio){
         if(!isNaN(r) || !isNaN(e2)) alguno = true;
         if(!isNaN(r)){ est[nom].n++; if(typeof est[nom].min==='number' && r < est[nom].min) est[nom].bajo++; }
         if(!isNaN(e2)){ est[nom].n++; if(typeof est[nom].min==='number' && e2 < est[nom].min) est[nom].bajo++; }
-        sec.push({orden: d*2 + (t==='N'?1:0), nombre: nom, r: r, e: e2});
+        sec.push({orden: d*2 + (t==='N'?1:0), nombre: nom, r: r, e: e2, fecha: fk(d), turno: t});
       });
       if(alguno) turnosE++;
     });
   }
   const porMed = {};
   sec.sort((a,b)=>a.orden-b.orden).forEach(s=>{ if(!porMed[s.nombre]) porMed[s.nombre]=[]; porMed[s.nombre].push(s); });
+  const discDetalles = [];
   Object.keys(porMed).forEach(nom=>{
     const arr = porMed[nom];
     for(let i=1;i<arr.length;i++){
-      if(!isNaN(arr[i-1].e) && !isNaN(arr[i].r) && arr[i-1].e !== arr[i].r){ est[nom].disc++; discTotal++; }
+      if(!isNaN(arr[i-1].e) && !isNaN(arr[i].r) && arr[i-1].e !== arr[i].r){
+        est[nom].disc++; discTotal++;
+        discDetalles.push({nombre: nom, fechaE: arr[i-1].fecha, turnoE: arr[i-1].turno, e: arr[i-1].e, fechaR: arr[i].fecha, turnoR: arr[i].turno, r: arr[i].r});
+      }
     }
   });
   const carros = DATA().carros.map(carro=>{
@@ -1966,7 +1970,7 @@ function calcStats(mes, anio){
     }
     return {hoja: carro.hoja, revMes: delMes.length, ult: ult?ult.fecha:null, diasUlt: diasUlt, totalItems: totalItems, revisados: revisados, bajos: bajos, vencidos: vencidos, v30: v30};
   });
-  return {turnosPosibles: turnosPosibles, turnosReg: turnosReg, meds: meds, turnosE: turnosE, est: est, discTotal: discTotal, carros: carros};
+  return {turnosPosibles: turnosPosibles, turnosReg: turnosReg, meds: meds, turnosE: turnosE, est: est, discTotal: discTotal, discDetalles: discDetalles, carros: carros};
 }
 function kpiRow(pares){
   const k = el('div','kpis');
@@ -2061,7 +2065,27 @@ function renderStats(c){
   } else cB.appendChild(el('p','hint','Sin registros este mes.'));
   cB.appendChild(el('h3','sec','Cómo mejorar'));
   let recsB = 0;
-  if(S.discTotal>0){ rec(cB,'rojo','Se detectaron '+S.discTotal+' diferencias entre lo ENTREGADO por un turno y lo RECIBIDO por el siguiente. En estupefacientes esto es crítico: hacer el conteo JUNTOS en el cambio de turno y aclarar cada diferencia antes de firmar.'); recsB++; }
+  if(S.discTotal>0){
+    rec(cB,'rojo','Se detectaron '+S.discTotal+' diferencias entre lo ENTREGADO por un turno y lo RECIBIDO por el siguiente. En estupefacientes esto es crítico: hacer el conteo JUNTOS en el cambio de turno y aclarar cada diferencia antes de firmar.');
+    (S.discDetalles||[]).forEach(dd=>{
+      const fila = el('div','alert-item rojo');
+      const izq = el('span');
+      izq.appendChild(el('b','','💡 ' + dd.nombre));
+      fila.appendChild(izq);
+      const der = el('span');
+      const t1 = el('b','', 'Turno ' + dd.turnoE + ' (' + fmtFechaCorta(dd.fechaE) + ') entregó ' + dd.e);
+      t1.style.cssText = 'color:var(--rojo);';
+      const t2 = el('b','', 'Turno ' + dd.turnoR + ' (' + fmtFechaCorta(dd.fechaR) + ') recibió ' + dd.r);
+      t2.style.cssText = 'color:var(--rojo);';
+      der.appendChild(t1);
+      der.appendChild(document.createTextNode('  →  '));
+      der.appendChild(t2);
+      der.appendChild(document.createTextNode('  (diferencia: ' + (dd.r - dd.e > 0 ? '+' : '') + (dd.r - dd.e) + ')'));
+      fila.appendChild(der);
+      cB.appendChild(fila);
+    });
+    recsB++;
+  }
   if(S.turnosPosibles && cobE < 80){ rec(cB,'ambar','Control registrado solo en el '+cobE+'% de los turnos. El control de estupefacientes debe ser en el 100% de los cambios de turno.'); recsB++; }
   usadosE.forEach(n=>{
     const m = S.est[n], pct = m.n ? Math.round(m.bajo/m.n*100) : 0;
